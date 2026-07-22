@@ -4,8 +4,17 @@
   "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI",
   "main": "index.ts",
   "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "scripts": {
     "test": "pi -e ./index.ts --version"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-coding-agent": "^0.73.1"
   },
   "keywords": [
     "pi-agent",
