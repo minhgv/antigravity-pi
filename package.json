@@ -1,0 +1,19 @@
+{
+  "name": "pi-antigravity-native",
+  "version": "1.0.0",
+  "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "pi -e ./index.ts --version"
+  },
+  "keywords": [
+    "pi-agent",
+    "pi-extension",
+    "google-antigravity",
+    "gemini"
+  ],
+  "author": "Minh GV <minhgv@gmail.com>",
+  "license": "MIT",
+  "private": true
+}
