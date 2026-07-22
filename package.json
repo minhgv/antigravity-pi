@@ -12,9 +12,9 @@
   "scripts": {
     "test": "pi -e ./index.ts --version"
   },
-  "dependencies": {
-    "@mariozechner/pi-ai": "^0.73.1",
-    "@mariozechner/pi-coding-agent": "^0.73.1"
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": ">=0.73.0",
+    "@mariozechner/pi-ai": ">=0.70.0"
   },
   "keywords": [
     "pi-agent",
