@@ -1,5 +1,6 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 export default async function (pi: ExtensionAPI) {
   try {
@@ -11,27 +12,33 @@ export default async function (pi: ExtensionAPI) {
       oauthModule = await import("@mariozechner/pi-ai/oauth");
       providerModule = await import("@mariozechner/pi-ai/google-gemini-cli");
     } catch {
-      // 2. Fallback to OpenClaw / AICoworker installed package paths
-      const candidatePaths = [
-        "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-        "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-        process.env.HOME + "/.openclaw/node_modules/@mariozechner/pi-ai"
-      ];
+      try {
+        oauthModule = await import("@earendil-works/pi-ai/oauth");
+        providerModule = await import("@earendil-works/pi-ai/google-gemini-cli");
+      } catch {
+        // 2. Fallback to OpenClaw / AICoworker installed package paths that contain google-gemini-cli.js
+        const candidatePaths = [
+          "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+          "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+          process.env.HOME + "/.openclaw/node_modules/@mariozechner/pi-ai"
+        ];
 
-      let openclawBasePath = "";
-      for (const p of candidatePaths) {
-        if (fs.existsSync(p)) {
-          openclawBasePath = p;
-          break;
+        let openclawBasePath = "";
+        for (const p of candidatePaths) {
+          const cliFile = path.join(p, "dist/providers/google-gemini-cli.js");
+          if (fs.existsSync(cliFile)) {
+            openclawBasePath = p;
+            break;
+          }
         }
-      }
 
-      if (openclawBasePath) {
-        oauthModule = await import(`${openclawBasePath}/dist/utils/oauth/google-antigravity.js`);
-        providerModule = await import(`${openclawBasePath}/dist/providers/google-gemini-cli.js`);
-      } else {
-        console.warn("[Antigravity Extension] Warning: @mariozechner/pi-ai module not found.");
-        return;
+        if (openclawBasePath) {
+          oauthModule = await import(`${openclawBasePath}/dist/utils/oauth/google-antigravity.js`);
+          providerModule = await import(`${openclawBasePath}/dist/providers/google-gemini-cli.js`);
+        } else {
+          console.warn("[Antigravity Extension] Warning: google-gemini-cli module not found in candidate paths.");
+          return;
+        }
       }
     }
 
