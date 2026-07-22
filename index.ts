@@ -234,6 +234,20 @@ export default async function (pi: ExtensionAPI) {
       models,
       oauth: {
         ...(oauthModule.antigravityOAuthProvider || oauthModule),
+        async refreshToken(credentials: any) {
+          const creds = typeof credentials === "string" ? JSON.parse(credentials) : credentials;
+          const refresh = creds.refresh || creds.refresh_token;
+          const projectId = creds.projectId || "summer-progress-g2w4j";
+          if (!refresh) throw new Error("Antigravity credentials missing refresh token");
+          const res = await oauthModule.refreshAntigravityToken(refresh, projectId);
+          return {
+            type: "oauth",
+            refresh: res.refresh || refresh,
+            access: res.access,
+            expires: res.expires,
+            projectId: res.projectId || projectId
+          };
+        },
         getApiKey(credentials: any) {
           const creds = typeof credentials === "string" ? JSON.parse(credentials) : credentials;
           const token = creds.access || creds.token || creds.key;
