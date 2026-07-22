@@ -3,27 +3,37 @@ import * as fs from "node:fs";
 
 export default async function (pi: ExtensionAPI) {
   try {
-    const candidatePaths = [
-      "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-      "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-      process.env.HOME + "/.openclaw/node_modules/@mariozechner/pi-ai"
-    ];
+    let oauthModule: any;
+    let providerModule: any;
 
-    let openclawBasePath = "";
-    for (const p of candidatePaths) {
-      if (fs.existsSync(p)) {
-        openclawBasePath = p;
-        break;
+    // 1. Try standard package specifiers
+    try {
+      oauthModule = await import("@mariozechner/pi-ai/oauth");
+      providerModule = await import("@mariozechner/pi-ai/google-gemini-cli");
+    } catch {
+      // 2. Fallback to OpenClaw / AICoworker installed package paths
+      const candidatePaths = [
+        "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+        "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+        process.env.HOME + "/.openclaw/node_modules/@mariozechner/pi-ai"
+      ];
+
+      let openclawBasePath = "";
+      for (const p of candidatePaths) {
+        if (fs.existsSync(p)) {
+          openclawBasePath = p;
+          break;
+        }
+      }
+
+      if (openclawBasePath) {
+        oauthModule = await import(`${openclawBasePath}/dist/utils/oauth/google-antigravity.js`);
+        providerModule = await import(`${openclawBasePath}/dist/providers/google-gemini-cli.js`);
+      } else {
+        console.warn("[Antigravity Extension] Warning: @mariozechner/pi-ai module not found.");
+        return;
       }
     }
-
-    if (!openclawBasePath) {
-      console.warn("[Antigravity Extension] Warning: OpenClaw pi-ai module not found.");
-      return;
-    }
-
-    const oauthModule = await import(`${openclawBasePath}/dist/utils/oauth/google-antigravity.js`);
-    const providerModule = await import(`${openclawBasePath}/dist/providers/google-gemini-cli.js`);
 
     const models = [
       {
@@ -210,12 +220,11 @@ export default async function (pi: ExtensionAPI) {
     ];
 
     pi.registerProvider("google-antigravity", {
-      name: "Google Antigravity Native (OpenClaw Engine)",
+      name: "Google Antigravity Native",
       baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
       api: "google-gemini-cli" as any,
       defaultModel: "gemini-pro-agent",
       streamSimple: (model: any, context: any, options: any) => {
-        // Remap gemini-3.1-pro-high to wire model ID gemini-pro-agent
         const targetModel = { ...model };
         if (targetModel.id === "gemini-3.1-pro-high") {
           targetModel.id = "gemini-pro-agent";
@@ -224,7 +233,7 @@ export default async function (pi: ExtensionAPI) {
       },
       models,
       oauth: {
-        ...oauthModule.antigravityOAuthProvider,
+        ...(oauthModule.antigravityOAuthProvider || oauthModule),
         getApiKey(credentials: any) {
           const creds = typeof credentials === "string" ? JSON.parse(credentials) : credentials;
           const token = creds.access || creds.token || creds.key;
@@ -234,7 +243,7 @@ export default async function (pi: ExtensionAPI) {
       }
     });
 
-    console.log(`[Antigravity Native Extension] Registered full 20-model catalog! Base: ${openclawBasePath}`);
+    console.log(`[Antigravity Native Extension] Successfully loaded and registered full 20-model catalog!`);
   } catch (err) {
     console.error("[Antigravity Native Extension] Initialization error:", err);
   }
