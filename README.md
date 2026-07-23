@@ -4,6 +4,27 @@ Extension tích hợp **Google Antigravity 2.0 Native Provider** dành cho **Pi 
 
 ---
 
+## 🎯 Tác dụng chính của Repository đối với Antigravity
+
+Repository này đóng vai trò là cầu nối kỹ thuật cho phép **Google Antigravity 2.0 Native Engine** chạy trực tiếp và toàn diện trên môi trường **Pi CLI**, vượt qua các rào cản tương thích của API thông thường.
+
+### 1. Các tác dụng chính (Core Benefits)
+
+- ⚡ **Native Antigravity Transport & Streaming:** Kết nối trực tiếp tới endpoint CloudCode Sandbox của Google Antigravity (`daily-cloudcode-pa.sandbox.googleapis.com`) với giao thức SSE native, tốc độ cao và độ trễ thấp.
+- 🛠️ **Bảo toàn 100% Native Tool Calling:** Giúp các mô hình Antigravity (`gemini-pro-agent`, `gemini-3.6-flash-high`) thực thi chuẩn xác các công cụ mặc định của Pi CLI (`read`, `write`, `edit`, `bash`) mà không gãy định dạng ToolCall.
+- 🔑 **Quản lý Xác thực OAuth 2.0 PKCE:** Tích hợp luồng đăng nhập OAuth PKCE tự động (port `51121`), tự động làm mới access token (`refreshToken`) và xử lý Project ID (`summer-progress-g2w4j`).
+- 📦 **Mở rộng Danh mục 20 Mô hình Antigravity:** Cung cấp cho Pi CLI khả năng truy cập catalog 20 mô hình bao gồm Gemini 3.1 Pro High/Low, Gemini 3.6 Flash, Gemini Flash Lite, Claude Opus Thinking (Experimental) và GPT-OSS.
+- 🛡️ **Tự động Patch & Tự sửa lỗi Upstream:** Tự động phát hiện các cài đặt `@mariozechner/pi-ai` / `@earendil-works/pi-ai` trên hệ thống và sửa chữa triệt để các lỗi khuyết module/export upstream trên bản `pi-ai` 0.81.x.
+
+### 2. Các hoạt động thực hiện (Key Operations & Workflows)
+
+- 🔄 **Bơm Vendor Code (`scripts/patch-global.js`):** Tự động phát hiện đường dẫn `pi-ai` toàn cục và chèn các file xử lý Antigravity Native (`google-gemini-cli.js`, `google-shared.js`, `google-antigravity.js`, `pkce.js`, `oauth-page.js`) vào thư mục `dist/`.
+- 🔧 **Khôi phục Module & Export Khuyết:** Tự động kiểm tra và khởi tạo `dist/api-registry.js`, bổ sung `supportsXhigh` trong `models.js`, `createFauxCore` trong `faux.js` và 8 Provider Factory exports (`amazonBedrockProvider`, `anthropicProvider`, `googleProvider`, `openaiProvider`,...) nếu bản `pi-ai` bị thiếu.
+- 🔌 **Đăng ký Extension Runtime (`index.ts`):** Đăng ký provider `google-antigravity` vào Pi CLI qua `pi.registerProvider()`, gán mô hình mặc định `gemini-pro-agent`, thiết lập callback đăng nhập OAuth và cơ chế lấy API key.
+- 🔀 **Ánh xạ Mô hình & Truyền tải Thinking:** Tự động re-map các alias (ví dụ `gemini-3.1-pro-high` → `gemini-pro-agent`), đồng thời truyền các cấu hình suy luận chuyên sâu (Reasoning / Thinking) lên hạ tầng Antigravity.
+
+---
+
 ## 🚀 Tính năng nổi bật
 
 - ⚡ **Native Tool Calling:** Sử dụng động cơ native `@mariozechner/pi-ai`, bảo toàn 100% khả năng gọi hàm (`read`, `write`, `edit`, `bash`) chuẩn xác.
