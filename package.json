@@ -10,6 +10,8 @@
     ]
   },
   "scripts": {
+    "patch": "node scripts/patch-global.js",
+    "postinstall": "node scripts/patch-global.js",
     "test": "pi -e ./index.ts --version"
   },
   "peerDependencies": {
