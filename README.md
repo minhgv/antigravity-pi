@@ -9,7 +9,7 @@ Extension tích hợp **Google Antigravity 2.0 Native Provider** dành cho **Pi 
 - ⚡ **Native Tool Calling:** Sử dụng động cơ native `@mariozechner/pi-ai`, bảo toàn 100% khả năng gọi hàm (`read`, `write`, `edit`, `bash`) chuẩn xác.
 - 🔑 **OAuth 2.0 PKCE Integration:** Hỗ trợ xác thực tài khoản Google Antigravity trực tiếp qua trình duyệt web.
 - 📦 **Tích hợp sẵn Vendor Files:** Lưu trữ sẵn toàn bộ module Antigravity Native (`google-gemini-cli.js`, `google-antigravity.js`, `google-shared.js`, `oauth-page.js`, `pkce.js`) giúp patch tự động vào bộ `pi-ai` phổ thông.
-- 🛠️ **Tự động Patch & Fast Load:** Chạy script patch tự động bơm file vào module `pi-ai` global, tối ưu thời gian khởi động chỉ còn **~70ms-90ms**.
+- 🛠️ **Tự động Patch & Tự sửa lỗi Upstream:** Script patch tự động bơm vendor file, đồng thời tự động nhận diện và sửa lỗi khuyết export/module (`api-registry.js`, `supportsXhigh`, `createFauxCore`, provider factories) trên các phiên bản `pi-ai` 0.81.x phổ thông.
 
 ---
 
@@ -20,7 +20,7 @@ pi-antigravity-native/
 ├── index.ts                   # Mã nguồn chính của Extension
 ├── package.json               # Cấu hình package & script patch
 ├── scripts/
-│   └── patch-global.js        # Script tự động phát hiện và bơm vendor file vào pi-ai global
+│   └── patch-global.js        # Script tự động phát hiện, bơm vendor file và sửa lỗi pi-ai global
 ├── vendor/                    # Lưu trữ các file native Antigravity từ AICoworker/OpenClaw
 │   ├── providers/
 │   │   ├── google-gemini-cli.js
@@ -47,13 +47,13 @@ cd ~/.pi/agent/extensions/antigravity-native
 
 ### Bước 2: Chạy script Patch vào module `pi-ai` global
 
-Chạy lệnh sau để tự động phát hiện và bơm các file Antigravity Native vào gói `pi-ai` toàn cục:
+Chạy lệnh sau để tự động phát hiện, vá module và bơm các file Antigravity Native vào gói `pi-ai` toàn cục:
 
 ```bash
 npm run patch
 ```
 
-*Script sẽ tự động quét và patch vào các đường dẫn `pi-ai` phổ biến như:*
+*Script sẽ tự động quét và patch/bổ sung vào các đường dẫn `pi-ai` phổ biến như:*
 - `/opt/homebrew/lib/node_modules/@mariozechner/pi-ai`
 - `/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai`
 - Thư mục `npm root -g` trên Linux/macOS/Windows
