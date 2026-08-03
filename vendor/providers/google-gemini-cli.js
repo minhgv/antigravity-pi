@@ -234,7 +234,7 @@ export const streamGoogleGeminiCli = (model, context, options) => {
             }
             const isAntigravity = model.provider === "google-antigravity";
             const baseUrl = model.baseUrl?.trim();
-            const endpoints = baseUrl ? [baseUrl] : isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
+            const endpoints = baseUrl ? [baseUrl, ...ANTIGRAVITY_ENDPOINT_FALLBACKS.filter(e => e !== baseUrl)] : isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
             let requestBody = buildRequest(model, context, projectId, options, isAntigravity);
             const nextRequestBody = await options?.onPayload?.(requestBody, model);
             if (nextRequestBody !== undefined) {
@@ -312,6 +312,9 @@ export const streamGoogleGeminiCli = (model, context, options) => {
                     lastError = error instanceof Error ? error : new Error(String(error));
                     if (lastError.message === "fetch failed" && lastError.cause instanceof Error) {
                         lastError = new Error(`Network error: ${lastError.cause.message}`);
+                    }
+                    if (endpointIndex < endpoints.length - 1) {
+                        endpointIndex++;
                     }
                     // Network errors are retryable
                     if (attempt < MAX_RETRIES) {

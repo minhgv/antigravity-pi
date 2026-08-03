@@ -7,52 +7,80 @@ export default async function (pi: ExtensionAPI) {
     let oauthModule: any;
     let providerModule: any;
 
-    // 1. Candidate module paths (Global Node, Homebrew, AICoworker, OpenClaw)
-    const candidatePaths = [
-      "/opt/homebrew/lib/node_modules/@mariozechner/pi-ai",
-      "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
-      "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-      "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
-      (process.env.HOME || "") + "/.openclaw/node_modules/@mariozechner/pi-ai"
-    ];
+    // 1. Check local vendor/ directory first (self-contained extension)
+    const extensionDir = path.dirname(import.meta.url.replace("file://", ""));
+    const localOAuthPath = path.join(extensionDir, "vendor/utils/oauth/google-antigravity.js");
+    const localProviderPath = path.join(extensionDir, "vendor/providers/google-gemini-cli.js");
 
-    let basePath = "";
-    for (const p of candidatePaths) {
-      if (p && fs.existsSync(path.join(p, "dist/providers/google-gemini-cli.js"))) {
-        basePath = p;
-        break;
-      }
-    }
+    if (fs.existsSync(localOAuthPath) && fs.existsSync(localProviderPath)) {
+      oauthModule = await import(`file://${localOAuthPath}`);
+      providerModule = await import(`file://${localProviderPath}`);
+    } else {
+      // Fallback: Candidate module paths (Global Node, Homebrew, Linux, AICoworker, OpenClaw)
+      const home = process.env.HOME || "";
+      const candidatePaths = [
+        "/opt/homebrew/lib/node_modules/@mariozechner/pi-ai",
+        "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
+        "/usr/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
+        "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
+        path.join(home, ".local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai"),
+        "/Applications/AICoworker.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+        "/Applications/CrawBot.app/Contents/Resources/openclaw/node_modules/@mariozechner/pi-ai",
+        path.join(home, ".openclaw/node_modules/@mariozechner/pi-ai")
+      ];
 
-    // Auto-patch global pi-ai if not found
-    if (!basePath) {
       try {
-        const patchScript = path.join(path.dirname(import.meta.url.replace("file://", "")), "scripts/patch-global.js");
-        if (fs.existsSync(patchScript)) {
-          const { execSync } = await import("node:child_process");
-          execSync(`node "${patchScript}"`, { stdio: "ignore" });
-          for (const p of candidatePaths) {
-            if (p && fs.existsSync(path.join(p, "dist/providers/google-gemini-cli.js"))) {
-              basePath = p;
-              break;
+        const resolvedPkg = require.resolve("@earendil-works/pi-ai/package.json");
+        candidatePaths.unshift(path.dirname(resolvedPkg));
+      } catch {}
+      try {
+        const resolvedPkg = require.resolve("@mariozechner/pi-ai/package.json");
+        candidatePaths.unshift(path.dirname(resolvedPkg));
+      } catch {}
+
+      let basePath = "";
+      for (const p of candidatePaths) {
+        if (p && fs.existsSync(path.join(p, "dist/providers/google-gemini-cli.js"))) {
+          basePath = p;
+          break;
+        }
+      }
+
+      // Auto-patch global pi-ai if not found
+      if (!basePath) {
+        try {
+          const patchScript = path.join(path.dirname(import.meta.url.replace("file://", "")), "scripts/patch-global.js");
+          if (fs.existsSync(patchScript)) {
+            const { execSync } = await import("node:child_process");
+            execSync(`node "${patchScript}"`, { stdio: "ignore" });
+            for (const p of candidatePaths) {
+              if (p && fs.existsSync(path.join(p, "dist/providers/google-gemini-cli.js"))) {
+                basePath = p;
+                break;
+              }
             }
           }
+        } catch (patchErr) {
+          // Continue fallback
         }
-      } catch (patchErr) {
-        // Continue fallback
       }
-    }
 
-    if (basePath) {
-      oauthModule = await import(`${basePath}/dist/utils/oauth/google-antigravity.js`);
-      providerModule = await import(`${basePath}/dist/providers/google-gemini-cli.js`);
-    } else {
-      try {
-        oauthModule = await import("@mariozechner/pi-ai/oauth");
-        providerModule = await import("@mariozechner/pi-ai/google-gemini-cli");
-      } catch {
-        oauthModule = await import("@earendil-works/pi-ai/oauth");
-        providerModule = await import("@earendil-works/pi-ai/google-gemini-cli");
+      if (basePath) {
+        oauthModule = await import(`${basePath}/dist/utils/oauth/google-antigravity.js`);
+        providerModule = await import(`${basePath}/dist/providers/google-gemini-cli.js`);
+      } else {
+        try {
+          oauthModule = await import("@mariozechner/pi-ai/oauth");
+          providerModule = await import("@mariozechner/pi-ai/providers/google-gemini-cli");
+        } catch {
+          try {
+            oauthModule = await import("@earendil-works/pi-ai/oauth");
+            providerModule = await import("@earendil-works/pi-ai/providers/google-gemini-cli");
+          } catch {
+            oauthModule = await import("@earendil-works/pi-ai/oauth");
+            providerModule = await import("@earendil-works/pi-ai/google-gemini-cli");
+          }
+        }
       }
     }
 
