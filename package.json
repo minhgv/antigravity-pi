@@ -1,6 +1,6 @@
 {
   "name": "pi-antigravity-native",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI (cross-platform: macOS + Linux)",
   "main": "index.ts",
   "type": "module",
