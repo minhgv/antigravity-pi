@@ -1,7 +1,7 @@
 {
   "name": "pi-antigravity-native",
   "version": "1.0.0",
-  "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI",
+  "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI (cross-platform: macOS + Linux)",
   "main": "index.ts",
   "type": "module",
   "pi": {
@@ -11,18 +11,23 @@
   },
   "scripts": {
     "patch": "node scripts/patch-global.js",
-    "postinstall": "node scripts/patch-global.js",
+    "sync:vendor": "node scripts/sync-vendor-deps.js",
     "test": "pi -e ./index.ts --version"
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0"
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": ">=0.73.0",
-    "@mariozechner/pi-ai": ">=0.70.0"
+    "@earendil-works/pi-ai": ">=0.70.0"
   },
   "keywords": [
     "pi-agent",
     "pi-extension",
     "google-antigravity",
-    "gemini"
+    "gemini",
+    "cross-platform",
+    "linux"
   ],
   "author": "Minh GV <minhgv@gmail.com>",
   "license": "MIT",

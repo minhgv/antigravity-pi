@@ -505,6 +505,24 @@ for (const targetDir of targetCandidateDirs) {
         }
       }
 
+      // 2.5. Restore displaced helper modules.
+      // pi-ai >=0.83 moved simple-options.js and transform-messages.js from
+      // dist/providers/ to dist/api/, but the patched google-gemini-cli.js and
+      // google-shared.js import them as siblings ("./simple-options.js",
+      // "./transform-messages.js") from dist/providers/. Without these, loading
+      // the provider fails with: Cannot find module './simple-options.js'.
+      const distApi = path.join(targetDir, "dist/api");
+      if (fs.existsSync(distApi)) {
+        for (const file of ["simple-options.js", "transform-messages.js"]) {
+          const src = path.join(distApi, file);
+          const dst = path.join(distProviders, file);
+          if (fs.existsSync(src) && !fs.existsSync(dst)) {
+            fs.copyFileSync(src, dst);
+            console.log(`  🔧 Restored displaced ${file} (api/ -> providers/) in ${targetDir}`);
+          }
+        }
+      }
+
       // 3. Copy oauth files
       const vendorOauth = path.join(vendorDir, "utils/oauth");
       if (fs.existsSync(vendorOauth)) {
