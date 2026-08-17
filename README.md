@@ -21,6 +21,9 @@ Provider `google-antigravity` dùng **Cloud Code Assist API** của Google
 
 - ⚡ **Native Tool Calling** qua động cơ `pi-ai`.
 - 🔑 **OAuth 2.0 PKCE** (`pi login google-antigravity`).
+- ♻️ **401 Force-Refresh & Single-Flight Token Rotation:** Khi Google từ chối token trước thời hạn lưu trong credential (`expires`), provider tự ép làm mới token (single-flight — các request song song dùng chung một lệnh refresh), ghi ngược credential đã xoay vòng vào `~/.pi/agent/auth.json` (quyền `0600`) và retry request với token mới mà không làm gián đoạn phiên.
+- 📦 **Catalog 16 mô hình Gemini active:** Đồng bộ với catalog `antigravity-opencode` — bao trùm dòng `gemini-3.7-flash` (mở khoá qua UA `cli`) — cùng các mô hình thử nghiệm Claude/GPT-OSS (Experimental).
+- 🛡️ **User-Agent 3 chế độ:** `PI_ANTIGRAVITY_UA_MODE` = `cli` (mặc định) / `sdk` / `desktop`, tự nhận diện platform/arch.
 - 📦 **Self-contained Vendor** — `vendor/` là snapshot khép kín, **không cần patch
   pi-ai** để chạy. Chi tiết: [🔧 Cách hoạt động](#-cách-hoạt-động) và `vendor/NOTICE.md`.
 - 🍎🐧 **Cross-platform** — macOS (Homebrew, AICoworker, CrawBot, OpenClaw) &
@@ -49,6 +52,17 @@ sibling trong `providers/`, nhưng pi-ai 0.83 dời chúng sang `dist/api/`.
 
 **Bare specifier duy nhất:** `@google/genai` (dep của pi-ai, đã khai báo trong
 `dependencies`).
+
+### 8 Cơ chế Tương thích Giao thức
+
+1. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` chứa tiền tố nhận diện DeepMind Antigravity Agent kèm thẻ `[ignore]` (`google-gemini-cli.js`).
+2. **Payload `requestType: "agent"`:** Thêm thuộc tính `"requestType": "agent"` ở cấp cao nhất của body JSON request khi `isAntigravity` được bật (`google-gemini-cli.js`).
+3. **Payload `userAgent: "antigravity"`:** Gắn `"userAgent": "antigravity"` trong payload JSON gửi tới CloudCode Assist API (`google-gemini-cli.js`).
+4. **Custom `requestId: "agent-..."`:** Tự sinh `requestId` theo cấu trúc `agent-${Date.now()}-${random}` tương thích với log trace của Antigravity Server (`google-gemini-cli.js`).
+5. **HTTP User-Agent Header (3 chế độ):** Truyền Header `User-Agent` theo chế độ đặt qua `PI_ANTIGRAVITY_UA_MODE` (hoặc `OPENCODE_AGY_UA_MODE`): `cli` (mặc định — `antigravity/cli/1.1.13 (aidev_client; os_type=...; arch=...; auth_method=consumer)`, mở khoá các model mới nhất như `gemini-3.7-flash` vì server định tuyến model theo prefix UA), `sdk` (`antigravity/1.21.9 platform/arch`) và `desktop` (`Antigravity/2.2.1 platform/arch`); platform/arch tự nhận diện (`darwin`/`windows`/`linux`, `arm64`/`amd64`), version override qua `PI_AI_ANTIGRAVITY_VERSION` (`getAntigravityHeaders` trong `google-gemini-cli.js`).
+6. **Endpoint Sandbox Cascade Fallback:** Định tuyến ưu tiên qua 3 cấp endpoint Sandbox của Google CloudCode (`daily-cloudcode-pa.sandbox.googleapis.com` → `autopush` → `prod`) (`ANTIGRAVITY_ENDPOINT_FALLBACKS` trong `google-gemini-cli.js`).
+7. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` đối với các mô hình Claude Thinking chạy qua Antigravity (`needsClaudeThinkingBetaHeader` trong `google-gemini-cli.js`).
+8. **Multi-Scope OAuth PKCE & Project Identification:** Đăng nhập qua PKCE cổng `51121` xin các scope mở rộng (`cloud-platform`, `cclog`, `experimentsandconfigs`), hỗ trợ Project ID fallback (`rising-fact-p41fc` trong `google-antigravity.js` / `summer-progress-g2w4j` trong `index.ts`), đóng callback server an toàn (settle promise + `closeAllConnections`) và xoay vòng token tự động khi gặp 401 giữa phiên.
 
 ---
 

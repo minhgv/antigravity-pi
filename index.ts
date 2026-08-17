@@ -1,6 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
+
+const PROVIDER_ID = "google-antigravity";
 
 export default async function (pi: ExtensionAPI) {
   try {
@@ -84,7 +87,109 @@ export default async function (pi: ExtensionAPI) {
       }
     }
 
+    // ── 401 force-refresh mechanism (mapped from antigravity-auth plugin) ──
+    // Single-flight refresh so parallel tool/stream requests don't stampede the
+    // token endpoint, plus an in-memory cache: pi core keeps its credential in
+    // memory and won't observe our auth.json write until it restarts.
+    let refreshInFlight: Promise<{ token: string; projectId: string } | null> | null = null;
+    let freshCredentials: { token: string; projectId: string; expires: number } | null = null;
+
+    const authFilePath = () =>
+      path.join(
+        process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent"),
+        "auth.json"
+      );
+
+    function readStoredAntigravityCredential(): any {
+      try {
+        const data = JSON.parse(fs.readFileSync(authFilePath(), "utf8"));
+        return data?.[PROVIDER_ID] ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    // Merge-write the rotated credential back to pi's auth.json with the same
+    // 0600 permission the core store uses; best-effort since the in-memory
+    // cache already unblocks the running session.
+    function persistAntigravityCredential(cred: any): void {
+      try {
+        const file = authFilePath();
+        let data: any = {};
+        try {
+          data = JSON.parse(fs.readFileSync(file, "utf8"));
+        } catch {
+          // start fresh
+        }
+        data[PROVIDER_ID] = { ...data[PROVIDER_ID], ...cred, type: "oauth" };
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
+      } catch {
+        // best-effort
+      }
+    }
+
+    async function forceRefreshCredentials(): Promise<{ token: string; projectId: string } | null> {
+      if (!refreshInFlight) {
+        refreshInFlight = (async () => {
+          try {
+            const stored = readStoredAntigravityCredential();
+            const refresh = stored?.refresh;
+            if (!refresh) return null;
+            const projectId = stored?.projectId || freshCredentials?.projectId || "summer-progress-g2w4j";
+            const res = await oauthModule.refreshAntigravityToken(refresh, projectId);
+            const cred = {
+              type: "oauth",
+              access: res.access,
+              refresh: res.refresh || refresh,
+              expires: res.expires,
+              projectId: res.projectId || projectId
+            };
+            persistAntigravityCredential(cred);
+            freshCredentials = {
+              token: cred.access,
+              projectId: cred.projectId,
+              expires: cred.expires
+            };
+            return freshCredentials;
+          } catch {
+            return null;
+          } finally {
+            refreshInFlight = null;
+          }
+        })();
+      }
+      return refreshInFlight;
+    }
+
     const models = [
+      {
+        id: "gemini-3.7-flash-high",
+        name: "Gemini 3.7 Flash High (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65536,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.7-flash-medium",
+        name: "Gemini 3.7 Flash Medium (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65536,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.7-flash-low",
+        name: "Gemini 3.7 Flash Low (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65536,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
       {
         id: "gemini-pro-agent",
         name: "Gemini 3.1 Pro High (Antigravity Native)",
@@ -92,7 +197,7 @@ export default async function (pi: ExtensionAPI) {
         default: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -101,7 +206,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -110,7 +215,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -182,7 +287,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: false,
         input: ["text"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -191,25 +296,16 @@ export default async function (pi: ExtensionAPI) {
         reasoning: false,
         input: ["text"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
         id: "gemini-3.1-flash-image",
         name: "Gemini 3.1 Flash Image (Antigravity Native)",
         reasoning: false,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 1048576,
-        maxTokens: 65536,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "gemini-2.5-pro",
-        name: "Gemini 2.5 Pro (Antigravity Native)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 1048576,
-        maxTokens: 65536,
+        input: ["text"] as ("text" | "image")[],
+        contextWindow: 1000000,
+        maxTokens: 64000,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -278,7 +374,31 @@ export default async function (pi: ExtensionAPI) {
         if (targetModel.id === "gemini-3.1-pro-high") {
           targetModel.id = "gemini-pro-agent";
         }
-        return providerModule.streamGoogleGeminiCli(targetModel, context, options);
+        const wiredOptions = { ...(options ?? {}) };
+        try {
+          const creds = wiredOptions.apiKey ? JSON.parse(wiredOptions.apiKey) : null;
+          // Prefer the freshest token this extension rotated: pi core resolved
+          // apiKey from its in-memory credential, which lags behind auth.json.
+          if (
+            creds &&
+            freshCredentials &&
+            freshCredentials.expires > Date.now() &&
+            creds.token &&
+            creds.token !== freshCredentials.token
+          ) {
+            wiredOptions.apiKey = JSON.stringify({
+              ...creds,
+              token: freshCredentials.token,
+              projectId: freshCredentials.projectId
+            });
+          }
+        } catch {
+          // apiKey not JSON — leave untouched
+        }
+        wiredOptions.getFreshCredentials = forceRefreshCredentials;
+        // streamSimple entry: converts session reasoning effort → thinking level
+        // (with catalog-id suffix defaults) and keeps the 401 refresh hook wired.
+        return providerModule.streamSimpleGoogleGeminiCli(targetModel, context, wiredOptions);
       },
       models,
       oauth: {

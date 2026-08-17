@@ -352,7 +352,16 @@ export async function loginAntigravity(onAuth, onProgress, onManualCodeInput) {
         return credentials;
     }
     finally {
-        server.server.close();
+        // Release any pending waiter and drop keep-alive sockets so the
+        // process can exit promptly instead of hanging on open connections.
+        server.cancelWait();
+        try {
+            server.server.close();
+            server.server.closeAllConnections?.();
+        }
+        catch {
+            // best-effort
+        }
     }
 }
 export const antigravityOAuthProvider = {

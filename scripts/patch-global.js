@@ -491,47 +491,59 @@ for (const targetDir of targetCandidateDirs) {
     const distProviders = path.join(targetDir, "dist/providers");
     const distOauth = path.join(targetDir, "dist/utils/oauth");
 
-    if (fs.existsSync(distProviders) && fs.existsSync(distOauth)) {
-      console.log(`📦 Patching pi-ai module at: ${targetDir}`);
-      
-      // 1. Repair package gaps if pi-ai upstream has missing exports/files
-      repairPiAiPackageGaps(targetDir);
-
-      // 2. Copy provider files
-      const vendorProviders = path.join(vendorDir, "providers");
-      if (fs.existsSync(vendorProviders)) {
-        for (const file of fs.readdirSync(vendorProviders)) {
-          fs.copyFileSync(path.join(vendorProviders, file), path.join(distProviders, file));
+    if (fs.existsSync(distProviders)) {
+      try {
+        // Newer pi-ai layouts (0.83.x) ship oauth under dist/auth; recreate the
+        // legacy dist/utils/oauth location the vendored modules import from.
+        if (!fs.existsSync(distOauth)) {
+          fs.mkdirSync(distOauth, { recursive: true });
         }
-      }
+        console.log(`📦 Patching pi-ai module at: ${targetDir}`);
 
-      // 2.5. Restore displaced helper modules.
-      // pi-ai >=0.83 moved simple-options.js and transform-messages.js from
-      // dist/providers/ to dist/api/, but the patched google-gemini-cli.js and
-      // google-shared.js import them as siblings ("./simple-options.js",
-      // "./transform-messages.js") from dist/providers/. Without these, loading
-      // the provider fails with: Cannot find module './simple-options.js'.
-      const distApi = path.join(targetDir, "dist/api");
-      if (fs.existsSync(distApi)) {
-        for (const file of ["simple-options.js", "transform-messages.js"]) {
-          const src = path.join(distApi, file);
-          const dst = path.join(distProviders, file);
-          if (fs.existsSync(src) && !fs.existsSync(dst)) {
-            fs.copyFileSync(src, dst);
-            console.log(`  🔧 Restored displaced ${file} (api/ -> providers/) in ${targetDir}`);
+        // 1. Repair package gaps if pi-ai upstream has missing exports/files
+        repairPiAiPackageGaps(targetDir);
+
+        // 2. Copy provider files
+        const vendorProviders = path.join(vendorDir, "providers");
+        if (fs.existsSync(vendorProviders)) {
+          for (const file of fs.readdirSync(vendorProviders)) {
+            fs.copyFileSync(path.join(vendorProviders, file), path.join(distProviders, file));
           }
         }
-      }
 
-      // 3. Copy oauth files
-      const vendorOauth = path.join(vendorDir, "utils/oauth");
-      if (fs.existsSync(vendorOauth)) {
-        for (const file of fs.readdirSync(vendorOauth)) {
-          fs.copyFileSync(path.join(vendorOauth, file), path.join(distOauth, file));
+        // 2.5. Restore displaced helper modules.
+        // pi-ai >=0.83 moved simple-options.js and transform-messages.js from
+        // dist/providers/ to dist/api/, but the patched google-gemini-cli.js and
+        // google-shared.js import them as siblings ("./simple-options.js",
+        // "./transform-messages.js") from dist/providers/. Without these, loading
+        // the provider fails with: Cannot find module './simple-options.js'.
+        const distApi = path.join(targetDir, "dist/api");
+        if (fs.existsSync(distApi)) {
+          for (const file of ["simple-options.js", "transform-messages.js"]) {
+            const src = path.join(distApi, file);
+            const dst = path.join(distProviders, file);
+            if (fs.existsSync(src) && !fs.existsSync(dst)) {
+              fs.copyFileSync(src, dst);
+              console.log(`  🔧 Restored displaced ${file} (api/ -> providers/) in ${targetDir}`);
+            }
+          }
         }
-      }
 
-      patchedCount++;
+        // 3. Copy oauth files
+
+        // 3. Copy oauth files
+        const vendorOauth = path.join(vendorDir, "utils/oauth");
+        if (fs.existsSync(vendorOauth)) {
+          for (const file of fs.readdirSync(vendorOauth)) {
+            fs.copyFileSync(path.join(vendorOauth, file), path.join(distOauth, file));
+          }
+        }
+
+        patchedCount++;
+      } catch (err) {
+        // Read-only installs (e.g. app bundles) must not abort patching others
+        console.warn(`⚠️ Skipped ${targetDir}: ${err.code || err.message}`);
+      }
     }
   }
 }

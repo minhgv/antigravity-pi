@@ -27,12 +27,27 @@ const GEMINI_CLI_HEADERS = {
         pluginType: "GEMINI",
     }),
 };
-// Headers for Antigravity (sandbox endpoint) - requires specific User-Agent
-const DEFAULT_ANTIGRAVITY_VERSION = "1.21.9";
+// Headers for Antigravity (sandbox endpoint) - requires specific User-Agent.
+// UA mode: 'cli' (default, official Antigravity CLI UA — unlocks newest models
+// like gemini-3.7-flash; the server routes model availability by UA prefix),
+// 'sdk' (antigravity/1.21.9), 'desktop' (Antigravity/2.2.1).
 function getAntigravityHeaders() {
-    const version = process.env.PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION;
+    const platform = process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : "linux";
+    const arch = process.arch === "arm64" ? "arm64" : "amd64";
+    const uaMode = (process.env.PI_ANTIGRAVITY_UA_MODE || process.env.OPENCODE_AGY_UA_MODE || "cli").toLowerCase();
+    let userAgent;
+    if (uaMode === "sdk") {
+        userAgent = `antigravity/${process.env.PI_AI_ANTIGRAVITY_VERSION || "1.21.9"} ${platform}/${arch}`;
+    }
+    else if (uaMode === "desktop") {
+        userAgent = `Antigravity/${process.env.PI_AI_ANTIGRAVITY_VERSION || "2.2.1"} ${platform}/${arch}`;
+    }
+    else {
+        const cliVersion = process.env.PI_AI_ANTIGRAVITY_VERSION || "1.1.13";
+        userAgent = `antigravity/cli/${cliVersion} (aidev_client; os_type=${platform}; arch=${arch}; auth_method=consumer)`;
+    }
     return {
-        "User-Agent": `antigravity/${version} darwin/arm64`,
+        "User-Agent": userAgent,
     };
 }
 // Antigravity system instruction (compact version from CLIProxyAPI).
@@ -144,13 +159,28 @@ function needsClaudeThinkingBetaHeader(model) {
     return model.provider === "google-antigravity" && model.id.startsWith("claude-") && model.reasoning;
 }
 function isGemini3ProModel(modelId) {
-    return /gemini-3(?:\.1)?-pro/.test(modelId.toLowerCase());
+    const id = String(modelId || "").toLowerCase();
+    return id === "gemini-pro-agent" || (id.includes("gemini-3") && id.includes("pro"));
 }
 function isGemini3FlashModel(modelId) {
-    return /gemini-3(?:\.1)?-flash/.test(modelId.toLowerCase());
+    const id = String(modelId || "").toLowerCase();
+    return id.includes("flash-agent") || (id.includes("gemini-3") && id.includes("flash"));
 }
 function isGemini3Model(modelId) {
     return isGemini3ProModel(modelId) || isGemini3FlashModel(modelId);
+}
+// MINIMAL thinking is rejected by the Antigravity backend for Gemini 3.7+
+// (HTTP 400 "Thinking level MINIMAL is not supported for this model"); the
+// floor there is LOW. Gemini 3.6 and below still accept MINIMAL.
+function isMinimalThinkingSupported(modelId) {
+    const m = String(modelId || "").toLowerCase().match(/^gemini-(\d+)(?:\.(\d+))?/);
+    if (!m)
+        return false;
+    const major = Number(m[1]);
+    const minor = m[2] !== undefined ? Number(m[2]) : 0;
+    if (major >= 4)
+        return false;
+    return major === 3 ? minor < 7 : true;
 }
 /**
  * Check if an error is retryable (rate limit, server error, network error, etc.)
@@ -241,7 +271,7 @@ export const streamGoogleGeminiCli = (model, context, options) => {
                 requestBody = nextRequestBody;
             }
             const headers = isAntigravity ? getAntigravityHeaders() : GEMINI_CLI_HEADERS;
-            const requestHeaders = {
+            let requestHeaders = {
                 Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
                 Accept: "text/event-stream",
@@ -249,7 +279,7 @@ export const streamGoogleGeminiCli = (model, context, options) => {
                 ...(needsClaudeThinkingBetaHeader(model) ? { "anthropic-beta": CLAUDE_THINKING_BETA_HEADER } : {}),
                 ...options?.headers,
             };
-            const requestBodyJson = JSON.stringify(requestBody);
+            let requestBodyJson = JSON.stringify(requestBody);
             // Fetch with retry logic for rate limits, transient errors, and endpoint fallbacks.
             // On 403/404, immediately try the next endpoint (no delay).
             // On 429/5xx, retry with backoff on the same or next endpoint.
@@ -275,6 +305,29 @@ export const streamGoogleGeminiCli = (model, context, options) => {
                         break; // Success, exit retry loop
                     }
                     const errorText = await response.text();
+                    // On 401, Google rejected the token before its stored expiry:
+                    // force-refresh OAuth credentials (single-flight, provided by the
+                    // extension) and retry with the rotated token. Project ID lives
+                    // inside the request body, so rebuild it when it changes.
+                    if (response.status === 401 && attempt < MAX_RETRIES && typeof options?.getFreshCredentials === "function") {
+                        const fresh = await options.getFreshCredentials({ token: accessToken, projectId }).catch(() => null);
+                        if (fresh?.token) {
+                            accessToken = fresh.token;
+                            if (fresh.projectId && fresh.projectId !== projectId) {
+                                projectId = fresh.projectId;
+                                requestBody = buildRequest(model, context, projectId, options, isAntigravity);
+                                const nextRequestBody = await options?.onPayload?.(requestBody, model);
+                                if (nextRequestBody !== undefined) {
+                                    requestBody = nextRequestBody;
+                                }
+                                requestBodyJson = JSON.stringify(requestBody);
+                            }
+                            requestHeaders = { ...requestHeaders, Authorization: `Bearer ${accessToken}` };
+                            lastError = new Error("Antigravity 401 unauthorized — refreshing token");
+                            await sleep(200, options?.signal);
+                            continue;
+                        }
+                    }
                     // On 403/404, cascade to the next endpoint immediately (no delay)
                     if ((response.status === 403 || response.status === 404) && endpointIndex < endpoints.length - 1) {
                         endpointIndex++;
@@ -633,11 +686,18 @@ export const streamSimpleGoogleGeminiCli = (model, context, options) => {
     if (!apiKey) {
         throw new Error("Google Cloud Code Assist requires OAuth authentication. Use /login to authenticate.");
     }
-    const base = buildBaseOptions(model, options, apiKey);
+    const base = buildBaseOptions(model, context, options, apiKey);
+    // Preserve the extension's 401 force-refresh hook through the option rebuild.
+    if (options?.getFreshCredentials) {
+        base.getFreshCredentials = options.getFreshCredentials;
+    }
     if (!options?.reasoning) {
+        // Catalog ids encode their level (e.g. gemini-3.6-flash-high); use it
+        // as the default so each catalog entry streams at its advertised level.
+        const defaultLevel = model.reasoning === false ? undefined : getDefaultThinkingLevel(model.id);
         return streamGoogleGeminiCli(model, context, {
             ...base,
-            thinking: { enabled: false },
+            thinking: defaultLevel ? { enabled: true, level: defaultLevel } : { enabled: false },
         });
     }
     const effort = clampReasoning(options.reasoning);
@@ -752,10 +812,28 @@ function getDisabledThinkingConfig(modelId) {
         return { thinkingLevel: "LOW" };
     }
     if (isGemini3FlashModel(modelId)) {
-        return { thinkingLevel: "MINIMAL" };
+        return { thinkingLevel: isMinimalThinkingSupported(modelId) ? "MINIMAL" : "LOW" };
     }
     // Gemini 2.x supports disabling via thinkingBudget = 0.
     return { thinkingBudget: 0 };
+}
+// Catalog ids encode their thinking level via -high/-medium/-low suffixes;
+// pro/agent entries default to HIGH (opencode catalog parity).
+function getDefaultThinkingLevel(modelId) {
+    const id = String(modelId || "").toLowerCase();
+    if (id === "gemini-pro-agent" || id.includes("flash-agent")) {
+        return "HIGH";
+    }
+    if (id.includes("extra-low") || id.includes("-low")) {
+        return "LOW";
+    }
+    if (id.includes("medium")) {
+        return "MEDIUM";
+    }
+    if (id.includes("high")) {
+        return "HIGH";
+    }
+    return isMinimalThinkingSupported(modelId) ? "MINIMAL" : "LOW";
 }
 function getGeminiCliThinkingLevel(effort, modelId) {
     if (isGemini3ProModel(modelId)) {
@@ -770,7 +848,7 @@ function getGeminiCliThinkingLevel(effort, modelId) {
     }
     switch (effort) {
         case "minimal":
-            return "MINIMAL";
+            return isMinimalThinkingSupported(modelId) ? "MINIMAL" : "LOW";
         case "low":
             return "LOW";
         case "medium":
