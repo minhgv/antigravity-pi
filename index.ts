@@ -15,10 +15,20 @@ export default async function (pi: ExtensionAPI) {
     const localOAuthPath = path.join(extensionDir, "vendor/utils/oauth/google-antigravity.js");
     const localProviderPath = path.join(extensionDir, "vendor/providers/google-gemini-cli.js");
 
+    let vendorLoaded = false;
     if (fs.existsSync(localOAuthPath) && fs.existsSync(localProviderPath)) {
-      oauthModule = await import(`file://${localOAuthPath}`);
-      providerModule = await import(`file://${localProviderPath}`);
-    } else {
+      try {
+        oauthModule = await import(`file://${localOAuthPath}`);
+        providerModule = await import(`file://${localProviderPath}`);
+        vendorLoaded = true;
+      } catch {
+        // The vendor snapshot declares one bare specifier (@google/genai) that
+        // pi-ai itself depends on; it resolves from a pi-ai install's
+        // node_modules, not from this repo. Fall through to the dist fallback
+        // below instead of requiring a local `npm install`.
+      }
+    }
+    if (!vendorLoaded) {
       // Fallback: Candidate module paths (Global Node, Homebrew, Linux, AICoworker, OpenClaw)
       const home = process.env.HOME || "";
       const candidatePaths = [
