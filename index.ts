@@ -179,7 +179,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -188,7 +188,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -197,7 +197,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -229,21 +229,12 @@ export default async function (pi: ExtensionAPI) {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
-        id: "gemini-3-flash",
-        name: "Gemini 3 Flash (Antigravity Native)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 1048576,
-        maxTokens: 65536,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
         id: "gemini-3.6-flash-high",
         name: "Gemini 3.6 Flash High (Antigravity Native)",
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -252,7 +243,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: false,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -261,25 +252,7 @@ export default async function (pi: ExtensionAPI) {
         reasoning: false,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "gemini-3.5-flash-low",
-        name: "Gemini 3.5 Flash Medium (Antigravity Native)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 1048576,
-        maxTokens: 65536,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "gemini-3.5-flash-extra-low",
-        name: "Gemini 3.5 Flash Low (Antigravity Native)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -288,7 +261,25 @@ export default async function (pi: ExtensionAPI) {
         reasoning: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
-        maxTokens: 65536,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.5-flash-low",
+        name: "Gemini 3.5 Flash Medium (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.5-flash-extra-low",
+        name: "Gemini 3.5 Flash Low (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       },
       {
@@ -296,6 +287,15 @@ export default async function (pi: ExtensionAPI) {
         name: "Gemini 3.5 Flash Lite (Antigravity Native)",
         reasoning: false,
         input: ["text"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3-flash",
+        name: "Gemini 3 Flash (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
         maxTokens: 65535,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
@@ -317,60 +317,6 @@ export default async function (pi: ExtensionAPI) {
         contextWindow: 1000000,
         maxTokens: 64000,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "claude-opus-4-6-thinking",
-        name: "Claude Opus 4.6 Thinking (Experimental)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 200000,
-        maxTokens: 128000,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "claude-opus-4-5-thinking",
-        name: "Claude Opus 4.5 Thinking (Experimental)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 200000,
-        maxTokens: 64000,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "claude-sonnet-4-6",
-        name: "Claude Sonnet 4.6 (Experimental)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 200000,
-        maxTokens: 64000,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "claude-sonnet-4-5-thinking",
-        name: "Claude Sonnet 4.5 Thinking (Experimental)",
-        reasoning: true,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 200000,
-        maxTokens: 64000,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "claude-sonnet-4-5",
-        name: "Claude Sonnet 4.5 (Experimental)",
-        reasoning: false,
-        input: ["text", "image"] as ("text" | "image")[],
-        contextWindow: 200000,
-        maxTokens: 64000,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: "gpt-oss-120b-medium",
-        name: "GPT-OSS 120B Medium (Experimental)",
-        reasoning: false,
-        input: ["text"] as ("text" | "image")[],
-        contextWindow: 128000,
-        maxTokens: 16384,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       }
     ];
 
@@ -381,7 +327,7 @@ export default async function (pi: ExtensionAPI) {
       defaultModel: "gemini-pro-agent",
       streamSimple: (model: any, context: any, options: any) => {
         const targetModel = { ...model };
-        if (targetModel.id === "gemini-3.1-pro-high") {
+        if (targetModel.id === "gemini-3.1-pro-high" || targetModel.id === "gemini-pro") {
           targetModel.id = "gemini-pro-agent";
         }
         const wiredOptions = { ...(options ?? {}) };
@@ -437,7 +383,7 @@ export default async function (pi: ExtensionAPI) {
     });
 
     if (process.env.DEBUG || process.argv.includes("--verbose")) {
-      console.log(`[Antigravity Native Extension] Successfully loaded and registered full 20-model catalog!`);
+      console.log(`[Antigravity Native Extension] Successfully loaded and registered full ${models.length}-model catalog!`);
     }
   } catch (err) {
     console.error("[Antigravity Native Extension] Initialization error:", err);

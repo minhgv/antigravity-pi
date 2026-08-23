@@ -158,21 +158,21 @@ export function extractRetryDelay(errorText, response) {
 function needsClaudeThinkingBetaHeader(model) {
     return model.provider === "google-antigravity" && model.id.startsWith("claude-") && model.reasoning;
 }
-function isGemini3ProModel(modelId) {
+export function isGemini3ProModel(modelId) {
     const id = String(modelId || "").toLowerCase();
     return id === "gemini-pro-agent" || (id.includes("gemini-3") && id.includes("pro"));
 }
-function isGemini3FlashModel(modelId) {
+export function isGemini3FlashModel(modelId) {
     const id = String(modelId || "").toLowerCase();
     return id.includes("flash-agent") || (id.includes("gemini-3") && id.includes("flash"));
 }
-function isGemini3Model(modelId) {
+export function isGemini3Model(modelId) {
     return isGemini3ProModel(modelId) || isGemini3FlashModel(modelId);
 }
 // MINIMAL thinking is rejected by the Antigravity backend for Gemini 3.7+
 // (HTTP 400 "Thinking level MINIMAL is not supported for this model"); the
 // floor there is LOW. Gemini 3.6 and below still accept MINIMAL.
-function isMinimalThinkingSupported(modelId) {
+export function isMinimalThinkingSupported(modelId) {
     const m = String(modelId || "").toLowerCase().match(/^gemini-(\d+)(?:\.(\d+))?/);
     if (!m)
         return false;
@@ -819,9 +819,9 @@ function getDisabledThinkingConfig(modelId) {
 }
 // Catalog ids encode their thinking level via -high/-medium/-low suffixes;
 // pro/agent entries default to HIGH (opencode catalog parity).
-function getDefaultThinkingLevel(modelId) {
+export function getDefaultThinkingLevel(modelId) {
     const id = String(modelId || "").toLowerCase();
-    if (id === "gemini-pro-agent" || id.includes("flash-agent")) {
+    if (id === "gemini-pro-agent" || id.includes("flash-agent") || id === "gemini-3.7-flash") {
         return "HIGH";
     }
     if (id.includes("extra-low") || id.includes("-low")) {
@@ -835,7 +835,7 @@ function getDefaultThinkingLevel(modelId) {
     }
     return isMinimalThinkingSupported(modelId) ? "MINIMAL" : "LOW";
 }
-function getGeminiCliThinkingLevel(effort, modelId) {
+export function getGeminiCliThinkingLevel(effort, modelId) {
     if (isGemini3ProModel(modelId)) {
         switch (effort) {
             case "minimal":

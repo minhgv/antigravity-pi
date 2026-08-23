@@ -12,7 +12,8 @@
   "scripts": {
     "patch": "node scripts/patch-global.js",
     "sync:vendor": "node scripts/sync-vendor-deps.js",
-    "test": "pi -e ./index.ts --version"
+    "test": "pi -e ./index.ts --version",
+    "test:models": "node tests/test-models.js"
   },
   "dependencies": {
     "@google/genai": "^1.52.0"
