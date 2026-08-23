@@ -91,7 +91,6 @@ Extension load theo thứ tự ưu tiên:
 pi-antigravity-native/
 ├── index.ts                       # Extension entry: đăng ký 16 core models & provider
 ├── package.json
-├── AGENTS.md                      # Quy tắc dự án & Advisor consultation protocol
 ├── tests/
 │   └── test-models.js             # Bộ 23 verification tests cho model & thinking level
 ├── scripts/
