@@ -9,7 +9,7 @@ import {
   getGeminiCliThinkingLevel,
 } from "../vendor/providers/google-gemini-cli.js";
 
-console.log("🧪 Running Antigravity Native Core 16 Active Models Verification Tests...\n");
+console.log("🧪 Running Antigravity Native Core 20 Active Models Verification Tests...\n");
 
 let passed = 0;
 let total = 0;
@@ -57,22 +57,51 @@ await runAsyncTest("Provider 'google-antigravity' registers properly with model 
   assert.ok(registeredProvider, "Provider should be registered");
   assert.equal(registeredProvider.id, "google-antigravity");
   assert.ok(Array.isArray(registeredProvider.provider.models), "models should be an array");
-  assert.equal(registeredProvider.provider.defaultModel, "gemini-pro-agent");
+  assert.equal(registeredProvider.provider.defaultModel, "gemini-3.7-flash-high");
 });
 
 const models = registeredProvider?.provider?.models || [];
 const findModel = (id) => models.find((m) => m.id === id);
 
-test("Model catalog contains EXACTLY 16 core active models", () => {
-  assert.equal(models.length, 16, `model catalog should contain 16 models, got ${models.length}`);
+test("Model catalog contains EXACTLY 20 core active models", () => {
+  assert.equal(models.length, 20, `model catalog should contain 20 models, got ${models.length}`);
 });
 
-const expectedCore16Models = [
+const expectedCore20Models = [
+  {
+    id: "gemini-3.8-flash",
+    contextWindow: 1048576,
+    maxTokens: 65535,
+    reasoning: true,
+    input: ["text", "image"],
+  },
+  {
+    id: "gemini-3.8-flash-high",
+    contextWindow: 1048576,
+    maxTokens: 65535,
+    reasoning: true,
+    input: ["text", "image"],
+  },
+  {
+    id: "gemini-3.8-flash-medium",
+    contextWindow: 1048576,
+    maxTokens: 65535,
+    reasoning: true,
+    input: ["text", "image"],
+  },
+  {
+    id: "gemini-3.8-flash-low",
+    contextWindow: 1048576,
+    maxTokens: 65535,
+    reasoning: true,
+    input: ["text", "image"],
+  },
   {
     id: "gemini-3.7-flash-high",
     contextWindow: 1048576,
     maxTokens: 65535,
     reasoning: true,
+    default: true,
     input: ["text", "image"],
   },
   {
@@ -94,7 +123,6 @@ const expectedCore16Models = [
     contextWindow: 1048576,
     maxTokens: 65535,
     reasoning: true,
-    default: true,
     input: ["text", "image"],
   },
   {
@@ -183,7 +211,7 @@ const expectedCore16Models = [
   },
 ];
 
-for (const expected of expectedCore16Models) {
+for (const expected of expectedCore20Models) {
   test(`Model '${expected.id}' is present with correct specs`, () => {
     const model = findModel(expected.id);
     assert.ok(model, `Model '${expected.id}' must exist in catalog`);
@@ -220,7 +248,11 @@ test("Obsolete, legacy, and experimental models are completely removed", () => {
 // ─────────────────────────────────────────────────────────────
 console.log("\n🧠 Part B: Provider Thinking Helpers in google-gemini-cli.js");
 
-test("isGemini3FlashModel identifies Gemini 3.7 Flash variants", () => {
+test("isGemini3FlashModel identifies Gemini 3.8 and 3.7 Flash variants", () => {
+  assert.equal(isGemini3FlashModel("gemini-3.8-flash"), true);
+  assert.equal(isGemini3FlashModel("gemini-3.8-flash-high"), true);
+  assert.equal(isGemini3FlashModel("gemini-3.8-flash-medium"), true);
+  assert.equal(isGemini3FlashModel("gemini-3.8-flash-low"), true);
   assert.equal(isGemini3FlashModel("gemini-3.7-flash"), true);
   assert.equal(isGemini3FlashModel("gemini-3.7-flash-high"), true);
   assert.equal(isGemini3FlashModel("gemini-3.7-flash-medium"), true);
@@ -231,11 +263,14 @@ test("isGemini3FlashModel identifies Gemini 3.7 Flash variants", () => {
 });
 
 test("isMinimalThinkingSupported correctly rejects Gemini 3.7+ and allows Gemini <= 3.6", () => {
+  assert.equal(isMinimalThinkingSupported("gemini-3.8-flash"), false);
+  assert.equal(isMinimalThinkingSupported("gemini-3.8-flash-high"), false);
+  assert.equal(isMinimalThinkingSupported("gemini-3.8-flash-medium"), false);
+  assert.equal(isMinimalThinkingSupported("gemini-3.8-flash-low"), false);
   assert.equal(isMinimalThinkingSupported("gemini-3.7-flash"), false);
   assert.equal(isMinimalThinkingSupported("gemini-3.7-flash-high"), false);
   assert.equal(isMinimalThinkingSupported("gemini-3.7-flash-medium"), false);
   assert.equal(isMinimalThinkingSupported("gemini-3.7-flash-low"), false);
-  assert.equal(isMinimalThinkingSupported("gemini-3.8-flash"), false);
   assert.equal(isMinimalThinkingSupported("gemini-4.0-flash"), false);
 
   // Gemini <= 3.6 and Gemini 2.x support MINIMAL
@@ -247,6 +282,10 @@ test("isMinimalThinkingSupported correctly rejects Gemini 3.7+ and allows Gemini
 });
 
 test("getDefaultThinkingLevel resolves expected thinking level for all variants", () => {
+  assert.equal(getDefaultThinkingLevel("gemini-3.8-flash"), "LOW");
+  assert.equal(getDefaultThinkingLevel("gemini-3.8-flash-high"), "HIGH");
+  assert.equal(getDefaultThinkingLevel("gemini-3.8-flash-medium"), "MEDIUM");
+  assert.equal(getDefaultThinkingLevel("gemini-3.8-flash-low"), "LOW");
   assert.equal(getDefaultThinkingLevel("gemini-3.7-flash-high"), "HIGH");
   assert.equal(getDefaultThinkingLevel("gemini-3.7-flash-medium"), "MEDIUM");
   assert.equal(getDefaultThinkingLevel("gemini-3.7-flash-low"), "LOW");
@@ -257,6 +296,12 @@ test("getDefaultThinkingLevel resolves expected thinking level for all variants"
 });
 
 test("getGeminiCliThinkingLevel clamps MINIMAL to LOW on Gemini 3.7+ to avoid backend HTTP 400", () => {
+  assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.8-flash"), "LOW");
+  assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.8-flash-high"), "LOW");
+  assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.8-flash-low"), "LOW");
+  assert.equal(getGeminiCliThinkingLevel("high", "gemini-3.8-flash"), "HIGH");
+  assert.equal(getGeminiCliThinkingLevel("medium", "gemini-3.8-flash"), "MEDIUM");
+  assert.equal(getGeminiCliThinkingLevel("low", "gemini-3.8-flash"), "LOW");
   assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.7-flash"), "LOW");
   assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.7-flash-high"), "LOW");
   assert.equal(getGeminiCliThinkingLevel("minimal", "gemini-3.7-flash-low"), "LOW");
@@ -273,7 +318,7 @@ console.log(`Summary: ${passed}/${total} tests passed.`);
 console.log(`========================================\n`);
 
 if (passed === total) {
-  console.log("🎉 All Core 16 Model tests passed successfully!");
+  console.log("🎉 All Core 20 Model tests passed successfully!");
 } else {
   console.error("❌ Some tests failed!");
   process.exit(1);

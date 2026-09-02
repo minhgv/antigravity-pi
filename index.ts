@@ -174,9 +174,46 @@ export default async function (pi: ExtensionAPI) {
 
     const models = [
       {
+        id: "gemini-3.8-flash",
+        name: "Gemini 3.8 Flash (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.8-flash-high",
+        name: "Gemini 3.8 Flash High (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.8-flash-medium",
+        name: "Gemini 3.8 Flash Medium (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
+        id: "gemini-3.8-flash-low",
+        name: "Gemini 3.8 Flash Low (Antigravity Native)",
+        reasoning: true,
+        input: ["text", "image"] as ("text" | "image")[],
+        contextWindow: 1048576,
+        maxTokens: 65535,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      },
+      {
         id: "gemini-3.7-flash-high",
         name: "Gemini 3.7 Flash High (Antigravity Native)",
         reasoning: true,
+        default: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
         maxTokens: 65535,
@@ -204,7 +241,6 @@ export default async function (pi: ExtensionAPI) {
         id: "gemini-pro-agent",
         name: "Gemini 3.1 Pro High (Antigravity Native)",
         reasoning: true,
-        default: true,
         input: ["text", "image"] as ("text" | "image")[],
         contextWindow: 1048576,
         maxTokens: 65535,
@@ -324,7 +360,7 @@ export default async function (pi: ExtensionAPI) {
       name: "Google Antigravity Native",
       baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
       api: "google-gemini-cli" as any,
-      defaultModel: "gemini-pro-agent",
+      defaultModel: "gemini-3.7-flash-high",
       streamSimple: (model: any, context: any, options: any) => {
         const targetModel = { ...model };
         if (targetModel.id === "gemini-3.1-pro-high" || targetModel.id === "gemini-pro") {

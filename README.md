@@ -15,17 +15,25 @@ Provider `google-antigravity` kết nối trực tiếp **Cloud Code Assist API*
 - ⚡ **Native Tool Calling & Subagent Delegation**: Hỗ trợ đầy đủ bộ công cụ chuẩn và tương thích hoàn hảo với hệ thống subagents (`advisor`, `scout`, `Explore`, `Plan`).
 - 🔑 **OAuth 2.0 PKCE**: Đăng nhập nhanh chóng và an toàn qua `pi login google-antigravity`.
 - ♻️ **401 Force-Refresh & Single-Flight Token Rotation**: Tự động phát hiện và làm mới token khi bị từ chối giữa phiên, lưu ngược an toàn vào `~/.pi/agent/auth.json` (chmod `0600`) mà không làm gián đoạn tác vụ đang chạy.
-- 📦 **Catalog 16 Mô hình Gemini Core Active**: Đồng bộ chuẩn với danh mục active của Antigravity (`ANTIGRAVITY_MODEL_CATALOG`), tối ưu cho coding agent.
+- 📦 **Catalog 20 Mô hình Gemini Active**: Đồng bộ chuẩn với danh mục active của Antigravity (`ANTIGRAVITY_MODEL_CATALOG`), tối ưu cho coding agent.
 - 🧠 **Cơ chế Reasoning Level Thông minh**: Tự động giải quyết thinking effort theo hậu tố (`-high`, `-medium`, `-low`), tự động kẹp (clamp) mức sàn an toàn `LOW` trên Gemini 3.7+ để loại bỏ lỗi backend `HTTP 400 (MINIMAL not supported)`.
 - 🛡️ **User-Agent 3 chế độ (`PI_ANTIGRAVITY_UA_MODE`)**: `cli` (mặc định — mở khóa toàn bộ model mới), `sdk`, và `desktop`, tự động nhận diện OS và kiến trúc CPU.
 - 📦 **Self-contained Vendor**: Snapshot khép kín, hoạt động ngay sau khi clone mà không bắt buộc can thiệp vào mã nguồn Pi.
-- 🧪 **Bộ Test Suite Toàn diện**: Đi kèm bộ kiểm thử tự động 23 verification tests cho toàn bộ danh mục model và logic giải quyết thinking level.
+- 🧪 **Bộ Test Suite Toàn diện**: Đi kèm bộ kiểm thử tự động 27 verification tests cho toàn bộ danh mục model và logic giải quyết thinking level.
 
 ---
 
 ## 📋 Danh sách Models khả dụng (Available Models)
 
-Provider `google-antigravity` cung cấp danh mục 16 mô hình Gemini core active tối ưu cho lập trình:
+Provider `google-antigravity` cung cấp danh mục 20 mô hình Gemini active tối ưu cho lập trình:
+
+### 🚀 Dòng Gemini 3.8 Flash (Sẵn sàng đón đầu)
+| Model ID | Context Window | Max Output | Reasoning | Thinking Level | Mô tả |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `gemini-3.8-flash` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.8 Flash bản tiêu chuẩn (sàn thinking LOW) |
+| `gemini-3.8-flash-high` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.8 Flash với tư duy chuyên sâu mức High |
+| `gemini-3.8-flash-medium` | 1,048,576 (1M) | 65,535 | ✅ Có | MEDIUM | Gemini 3.8 Flash với tư duy cân bằng mức Medium |
+| `gemini-3.8-flash-low` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.8 Flash với tư duy phản hồi nhanh mức Low |
 
 ### 🌟 Gemini 3.7 Flash (Adaptive Thinking)
 | Model ID | Context Window | Max Output | Reasoning | Thinking Level | Mô tả |
@@ -89,10 +97,10 @@ Extension load theo thứ tự ưu tiên:
 
 ```text
 pi-antigravity-native/
-├── index.ts                       # Extension entry: đăng ký 16 core models & provider
+├── index.ts                       # Extension entry: đăng ký 20 core models & provider
 ├── package.json
 ├── tests/
-│   └── test-models.js             # Bộ 23 verification tests cho model & thinking level
+│   └── test-models.js             # Bộ 27 verification tests cho model & thinking level
 ├── scripts/
 │   ├── patch-global.js            # (Tuỳ chọn) Patch pi-ai dist toàn cục
 │   └── sync-vendor-deps.js        # Re-sync vendor khi nâng cấp Pi
@@ -119,7 +127,7 @@ cd ~/.pi/agent/extensions/antigravity-native
 # Cài đặt dependencies
 npm install
 
-# Chạy test kiểm tra toàn bộ 16 models & logic thinking
+# Chạy test kiểm tra toàn bộ 20 models & logic thinking
 npm run test:models
 ```
 
@@ -127,8 +135,8 @@ npm run test:models
 
 ```jsonc
 {
-  "defaultModel": "google-antigravity/gemini-pro-agent",
-  "smallModel": "google-antigravity/gemini-3-flash",
+  "defaultModel": "google-antigravity/gemini-3.7-flash-high",
+  "smallModel": "google-antigravity/gemini-3.7-flash-low",
   "plugins": ["antigravity-native"]
 }
 ```
@@ -139,7 +147,7 @@ npm run test:models
 # Đăng nhập OAuth PKCE lần đầu
 pi login google-antigravity
 
-# Khởi động với model mặc định (Gemini 3.1 Pro High)
+# Khởi động với model mặc định (Gemini 3.7 Flash High)
 pi
 
 # Khởi động với model cụ thể
