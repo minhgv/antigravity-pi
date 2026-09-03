@@ -75,21 +75,21 @@ Provider `google-antigravity` cung cấp danh mục 20 mô hình Gemini active t
 
 ---
 
-## 🔧 Cách hoạt động & 8 Cơ chế Tương thích
+## 🔧 Kiến trúc Native & Cơ chế Hoạt động
 
-Extension load theo thứ tự ưu tiên:
-1. **Vendor local (chính):** `import file://vendor/providers/google-gemini-cli.js` + `vendor/utils/oauth/google-antigravity.js`.
-2. **Fallback pi-ai global:** Quét candidate paths (macOS + Linux + `require.resolve`).
+Extension được xây dựng hoàn toàn bằng **TypeScript Native**, biên dịch ra `dist/index.js` và nạp trực tiếp qua Pi Extension API (`pi.registerProvider`):
+- **Không monkey-patching**: Tuyệt đối không can thiệp, vá lỗi hay sửa đổi file trong `node_modules` hay global packages.
+- **Độc lập và an toàn**: Đầy đủ tính năng stream, OAuth PKCE, Undici HTTP Client, schema dereferencing tự thân.
 
-### 8 Cơ chế Tương thích Giao thức:
-1. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` chứa tiền tố nhận diện DeepMind Antigravity Agent kèm thẻ `[ignore]`.
-2. **Payload `requestType: "agent"`:** Thêm thuộc tính `"requestType": "agent"` ở cấp cao nhất của body JSON request.
-3. **Payload `userAgent: "antigravity"`:** Gắn `"userAgent": "antigravity"` trong payload JSON gửi tới CloudCode Assist API.
-4. **Custom `requestId: "agent-..."`:** Tự sinh `requestId` theo cấu trúc `agent-${Date.now()}-${random}` tương thích với log trace của Antigravity Server.
-5. **HTTP User-Agent Header (3 chế độ):** Truyền Header `User-Agent` theo chế độ đặt qua `PI_ANTIGRAVITY_UA_MODE`: `cli` (mặc định), `sdk`, và `desktop`.
-6. **Endpoint Sandbox Cascade Fallback:** Định tuyến ưu tiên qua 3 cấp endpoint Sandbox của Google CloudCode (`daily-cloudcode-pa.sandbox.googleapis.com` $\rightarrow$ `autopush` $\rightarrow$ `prod`).
-7. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` khi cần.
-8. **Multi-Scope OAuth PKCE & Auto Rotation:** Đăng nhập qua PKCE cổng `51121` với đầy đủ các scope mở rộng, hỗ trợ Project ID fallback và tự động xoay vòng token khi gặp lỗi 401 giữa phiên.
+### 8 Cơ chế Tương thích & Tối ưu Giao thức:
+1. **Deterministic 63-bit Session ID & Trajectory Chaining:** Tạo Session ID cố định 63-bit (`deriveAntigravitySessionId`) từ user message đầu tiên và duy trì chuỗi phản hồi `last_execution_id` giúp tối đa hóa tỷ lệ trúng Prompt Cache của Google.
+2. **Keep-Alive HTTP Client & Connection Prewarming:** Quản lý kết nối qua Undici với `keepAliveTimeout: 60s` và tự động gửi `HEAD` request khi khởi động để loại bỏ độ trễ TLS handshake (150–300ms).
+3. **Recursive Schema Dereferencing:** Đệ quy giải phóng toàn bộ `$ref` và `$defs`, loại bỏ các schema keywords không tương thích để ngăn ngừa lỗi `HTTP 400 Bad Request` khi gọi tools.
+4. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` tương thích backend Google Antigravity.
+5. **Payload `requestType: "agent"` & `userAgent: "antigravity"`:** Đảm bảo routing đúng cụm máy chủ Antigravity nội bộ.
+6. **Custom `requestId: "agent-..."`:** Tự sinh `requestId` tương thích với trace logging của Google Cloud Code Assist.
+7. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` khi gọi Claude qua Antigravity bridge.
+8. **Multi-Scope OAuth PKCE & Auto Rotation:** Đăng nhập qua PKCE cổng `51121` với đầy đủ scopes, hỗ trợ Project ID fallback và tự động làm mới token.
 
 ---
 
@@ -97,18 +97,24 @@ Extension load theo thứ tự ưu tiên:
 
 ```text
 pi-antigravity-native/
-├── index.ts                       # Extension entry: đăng ký 20 core models & provider
-├── package.json
-├── tests/
-│   └── test-models.js             # Bộ 27 verification tests cho model & thinking level
-├── scripts/
-│   ├── patch-global.js            # (Tuỳ chọn) Patch pi-ai dist toàn cục
-│   └── sync-vendor-deps.js        # Re-sync vendor khi nâng cấp Pi
-├── vendor/                        # Snapshot self-contained (xem vendor/NOTICE.md)
-│   ├── NOTICE.md
-│   ├── providers/                 # google-gemini-cli, google-shared, simple-options...
-│   ├── utils/                     # oauth/*, event-stream, headers...
-│   └── api/ auth/ models.js
+├── index.ts                       # Root re-export dist/index.js
+├── package.json                   # Pi manifest ("pi": {"extensions": ["./dist/index.js"]})
+├── tsconfig.json                  # TypeScript config (ES2022 / NodeNext)
+├── dist/                          # Compiled native extension artifacts
+│   └── index.js
+├── src/                           # Native TypeScript source code
+│   ├── index.ts                   # Extension entry point, commands & registration
+│   ├── auth/                      # Headless OAuth PKCE & token management
+│   ├── client/                    # Antigravity API client & Undici HTTP dispatcher
+│   ├── diagnostics/               # Diagnostic commands (/antigravity.doctor, models)
+│   ├── image/                     # Vision / image generation command
+│   ├── models/                    # Model catalog & thinking level mappings
+│   ├── stream/                    # SSE streaming response & tool-call handling
+│   ├── types/                     # TypeScript interfaces & enums
+│   ├── usage/                     # Quota discovery & usage tracking (/antigravity.usage)
+│   └── utils/                     # HTTP, security, and schema dereferencing utilities
+├── test/
+│   └── antigravity.test.ts        # Comprehensive unit test suite (42 tests)
 └── README.md
 ```
 
@@ -124,11 +130,12 @@ mkdir -p ~/.pi/agent/extensions
 git clone https://github.com/minhgv/pi-antigravity-native.git ~/.pi/agent/extensions/antigravity-native
 cd ~/.pi/agent/extensions/antigravity-native
 
-# Cài đặt dependencies
+# Cài đặt dependencies và biên dịch TypeScript
 npm install
+npm run build
 
-# Chạy test kiểm tra toàn bộ 20 models & logic thinking
-npm run test:models
+# Chạy bộ kiểm thử tự động toàn diện (42 tests)
+npm test
 ```
 
 ### 2. Cấu hình `~/.pi/agent/settings.json`
@@ -162,15 +169,19 @@ pi --list-models | grep google-antigravity
 ## 🧪 Chạy Kiểm thử (Testing)
 
 ```bash
-# Kiểm tra extension load thành công với Pi CLI
+# Chạy bộ test suite 42 tests tự động kiểm tra stream, auth, cache, models và schema
 npm test
 
-# Chạy bộ test suite 23 tests kiểm tra toàn diện 16 models và logic thinking
-npm run test:models
+# Kiểm tra kiểu dữ liệu TypeScript
+npm run typecheck
+
+# Biên dịch lại extension
+npm run build
 ```
 
 ---
 
 ## 📜 Giấy phép
 
-MIT License. `vendor/` bundle file nội bộ của `@earendil-works/pi-ai` (cũng MIT) — xem `vendor/NOTICE.md` để biết thêm chi tiết.
+MIT License. Bản quyền thuộc về Minh GV.
+
