@@ -10,18 +10,18 @@ Provider `google-antigravity` kết nối trực tiếp **Cloud Code Assist API*
 
 ---
 
-## 🚀 Tính năng nổi bật
-
-- ⚡ **Native Tool Calling & Subagent Delegation**: Hỗ trợ đầy đủ bộ công cụ chuẩn và tương thích hoàn hảo với hệ thống subagents (`advisor`, `scout`, `Explore`, `Plan`).
-- 🔑 **OAuth 2.0 PKCE**: Đăng nhập nhanh chóng và an toàn qua `pi login google-antigravity`.
-- ♻️ **401 Force-Refresh & Single-Flight Token Rotation**: Tự động phát hiện và làm mới token khi bị từ chối giữa phiên, lưu ngược an toàn vào `~/.pi/agent/auth.json` (chmod `0600`) mà không làm gián đoạn tác vụ đang chạy.
-- 📦 **Catalog 20 Mô hình Gemini Active**: Đồng bộ chuẩn với danh mục active của Antigravity (`ANTIGRAVITY_MODEL_CATALOG`), tối ưu cho coding agent.
-- 🧠 **Cơ chế Reasoning Level Thông minh**: Tự động giải quyết thinking effort theo hậu tố (`-high`, `-medium`, `-low`), tự động kẹp (clamp) mức sàn an toàn `LOW` trên Gemini 3.7+ để loại bỏ lỗi backend `HTTP 400 (MINIMAL not supported)`.
-- 🛡️ **User-Agent 3 chế độ (`PI_ANTIGRAVITY_UA_MODE`)**: `cli` (mặc định — mở khóa toàn bộ model mới), `sdk`, và `desktop`, tự động nhận diện OS và kiến trúc CPU.
-- 📦 **Self-contained Vendor**: Snapshot khép kín, hoạt động ngay sau khi clone mà không bắt buộc can thiệp vào mã nguồn Pi.
-- 🧪 **Bộ Test Suite Toàn diện**: Đi kèm bộ kiểm thử tự động 27 verification tests cho toàn bộ danh mục model và logic giải quyết thinking level.
-
----
+- ⚡ **Pure Native TypeScript Extension**: Chạy độc lập 100%, tuân thủ chuẩn Extension API của Pi (`dist/index.js`), không monkey-patch hay sửa đổi `node_modules` hệ thống.
+- ⚡ **Prompt Cache Affinity & Trajectory Chaining**: Tạo 63-bit deterministic session ID từ user turn đầu tiên và xâu chuỗi `last_execution_id` giữa các turns, giúp tăng tỷ lệ hit prompt cache trên Google backend, giảm token input và tăng tốc phản hồi.
+- 🚀 **Keep-Alive HTTP Connection & Prewarming**: Sử dụng custom Undici dispatcher (`keepAliveTimeout: 60s`) kết hợp kỹ thuật connection prewarming (`HEAD` request khi khởi động) để loại bỏ độ trễ TLS handshake ở các tool calls kế tiếp.
+- 🧠 **Hỗ trợ Đa Dòng Mô Hình**: Hỗ trợ đầy đủ Gemini 3.8/3.7/3.6/3.5/3.1, Claude Sonnet/Opus 4.6 (Thinking), và GPT-OSS 120B kèm thinking level mapping (`low`, `medium`, `high`) và token clamping tự động.
+- 🔑 **OAuth 2.0 PKCE & Headless Fallback**: Đăng nhập nhanh chóng, hỗ trợ headless paste URL cho môi trường SSH/VPS/Docker, tự động phân giải `projectId` thật của tài khoản Google.
+- 🛡️ **Tự động Dereference Schema & Chuẩn Hóa Tool Calling**: Tự động đệ quy giải quyết `$ref`/`$defs` và loại bỏ các schema keywords không tương thích với Gemini backend.
+- 🛠️ **Slash Commands Tích Hợp Sẵn**:
+  - `/antigravity.usage`: Xem hạn mức quota theo thời gian thực (5h, weekly pool, thời gian reset).
+  - `/antigravity.doctor`: Chẩn đoán trạng thái OAuth, endpoint tốt nhất và độ trễ mạng.
+  - `/antigravity.models`: Xem danh sách toàn bộ các mô hình backend hiện có.
+  - `/antigravity.image`: Sinh ảnh trực tiếp từ terminal qua mô hình Imagen / Gemini Image.
+- 🧪 **Bộ Test Suite 42/42 Tests**: Bộ kiểm thử tự động toàn diện bao phủ toàn bộ stream, auth, cache, network và schema.
 
 ## 📋 Danh sách Models khả dụng (Available Models)
 

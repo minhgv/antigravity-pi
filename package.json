@@ -1,36 +1,56 @@
 {
   "name": "pi-antigravity-native",
-  "version": "1.1.0",
-  "description": "Google Antigravity 2.0 Native Provider Extension for Pi CLI (cross-platform: macOS + Linux)",
-  "main": "index.ts",
+  "version": "1.2.0",
+  "description": "Google Antigravity Native Provider Extension for Pi CLI with Gemini 3.8, prompt cache session affinity, and trajectory chaining",
   "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./dist/index.js"
     ]
   },
   "scripts": {
-    "patch": "node scripts/patch-global.js",
-    "sync:vendor": "node scripts/sync-vendor-deps.js",
-    "test": "pi -e ./index.ts --version",
-    "test:models": "node tests/test-models.js"
-  },
-  "dependencies": {
-    "@google/genai": "^1.52.0"
-  },
-  "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.73.0",
-    "@earendil-works/pi-ai": ">=0.70.0"
+    "build": "tsc",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "prepack": "npm run build"
   },
   "keywords": [
-    "pi-agent",
+    "pi",
     "pi-extension",
-    "google-antigravity",
+    "pi-package",
+    "antigravity",
     "gemini",
-    "cross-platform",
-    "linux"
+    "google-cloud-code-assist",
+    "oauth",
+    "prompt-caching"
   ],
   "author": "Minh GV <minhgv@gmail.com>",
   "license": "MIT",
-  "private": true
+  "dependencies": {
+    "undici": "^8.10.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": ">=0.70.0",
+    "@mariozechner/pi-coding-agent": ">=0.73.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.84.4",
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
 }
