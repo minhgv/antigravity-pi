@@ -7,7 +7,6 @@ import type {
   ToolCall,
 } from "@earendil-works/pi-ai";
 import type {
-  AntigravityRequestType,
   AntigravityUserAgent,
   GeminiRole,
   GeminiToolCallingMode,
@@ -116,7 +115,7 @@ export type GeminiGenerationConfig = {
 
 export type GeminiRequestBody = {
   contents: GeminiContent[];
-  systemInstruction: {
+  systemInstruction?: {
     role: GeminiRole.User;
     parts: GeminiTextPart[];
   };
@@ -131,7 +130,8 @@ export type AntigravityGenerateRequest = {
   project: string;
   model: string;
   request: GeminiRequestBody;
-  requestType: AntigravityRequestType.Agent;
+  // Official Antigravity omits requestType on consumer Cloud Code; "agent" is a
+  // constrained bucket that returns a detail-free 429 RESOURCE_EXHAUSTED.
   userAgent: AntigravityUserAgent.Antigravity;
   requestId: string;
 };

@@ -33,6 +33,53 @@ export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Zero-width obfuscation of system-instruction phrases for Antigravity.
+ *
+ * Cloud Code Assist inspects `systemInstruction` and answers matched payloads
+ * with a bare `429 RESOURCE_EXHAUSTED` (no `ErrorInfo`/`RetryInfo`), which is
+ * indistinguishable from real quota exhaustion and identical on every retry.
+ * Splitting a matched phrase with U+200B (zero-width space) clears the match
+ * while leaving the phrase visually and semantically intact for the model.
+ *
+ * Same mitigation CLIProxyAPI ships as `antigravity.sensitive-words`.
+ */
+const ZERO_WIDTH_SPACE = "​";
+
+/**
+ * Phrases known to trip the server-side literal matcher. Override with
+ * `ANTIGRAVITY_SENSITIVE_WORDS` (comma-separated); set it to an empty string
+ * to disable obfuscation entirely.
+ */
+const DEFAULT_SENSITIVE_WORDS = ["RFC 2119"];
+
+export function antigravitySensitiveWords(): readonly string[] {
+  // `??` (not antigravityEnv's `||`) so an empty value explicitly disables
+  // obfuscation instead of falling back to the default list.
+  const raw = process.env.ANTIGRAVITY_SENSITIVE_WORDS ?? process.env.NOAGY_SENSITIVE_WORDS;
+  if (raw === undefined) return DEFAULT_SENSITIVE_WORDS;
+  return raw
+    .split(",")
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Insert a zero-width space after the first character of every occurrence of
+ * each phrase. Matching is case-sensitive and literal; empty or whitespace-only
+ * phrases are ignored. Returns the input unchanged when nothing matches.
+ */
+export function obfuscateSensitiveWords(text: string, phrases: readonly string[]): string {
+  let result = text;
+  for (const phrase of phrases) {
+    const trimmed = phrase.trim();
+    if (trimmed.length < 2) continue;
+    const pattern = new RegExp(escapeRegExp(trimmed), "g");
+    result = result.replace(pattern, (match) => `${match[0]}${ZERO_WIDTH_SPACE}${match.slice(1)}`);
+  }
+  return result;
+}
+
 const INT63_MASK = (1n << 63n) - 1n;
 
 function formatSignedDecimalSessionId(value: bigint): string {

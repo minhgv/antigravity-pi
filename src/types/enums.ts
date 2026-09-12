@@ -32,10 +32,6 @@ export enum GeminiRole {
   Model = "model",
 }
 
-export enum AntigravityRequestType {
-  Agent = "agent",
-}
-
 export enum AntigravityUserAgent {
   Antigravity = "antigravity",
 }

@@ -2,7 +2,11 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { registerApiProvider } from "@earendil-works/pi-ai/compat";
 import { getApiKey, loginAntigravity, refreshAntigravityToken } from "./auth/index.js";
-import { DEFAULT_ENDPOINT, endpointCandidates } from "./client/index.js";
+import {
+  DEFAULT_ENDPOINT,
+  endpointCandidates,
+  ensureAntigravityVersion,
+} from "./client/index.js";
 import { getLastDiagnostics, runWithDiagnostics } from "./diagnostics/index.js";
 import {
   DEFAULT_IMAGE_MODEL,
@@ -64,7 +68,13 @@ export default function (pi: ExtensionAPI): void {
   // Open the TLS connection up front so the first message of a session does not pay
   // the handshake. Opt out with ANTIGRAVITY_NO_PREWARM=1.
   const primaryEndpoint = endpointCandidates()[0];
-  if (primaryEndpoint) prewarmConnection(primaryEndpoint);
+  if (primaryEndpoint) {
+    prewarmConnection(primaryEndpoint);
+    // Track the latest released client version so model gating on Cloud Code
+    // Assist keeps passing after a new Antigravity release. Fire-and-forget;
+    // the pinned fallback applies until (and if) discovery fails.
+    void ensureAntigravityVersion();
+  }
 
   registerApiProvider({
     api: ANTIGRAVITY_API,

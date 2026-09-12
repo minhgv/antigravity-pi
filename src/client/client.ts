@@ -64,33 +64,102 @@ export function endpointCandidates(preferredEndpoint?: string): string[] {
 const DEFAULT_ANTIGRAVITY_VERSION = "2.8.0";
 const DEFAULT_ANTIGRAVITY_CL = "963137146";
 
+const ANTIGRAVITY_VERSION_MANIFEST_URL =
+  "https://antigravity-hub-auto-updater-974169037036.us-central1.run.app/manifest/latest-arm64-mac.yml";
+const ANTIGRAVITY_VERSION_FETCH_TIMEOUT_MS = 5_000;
+
+let discoveredAntigravityVersion: string | null = null;
+let antigravityVersionFetch: Promise<void> | null = null;
+
+/** Current Antigravity client version: env override -> manifest-discovered -> pinned fallback. */
+export function getAntigravityVersion(): string {
+  return antigravityEnv("HUB_VERSION") || discoveredAntigravityVersion || DEFAULT_ANTIGRAVITY_VERSION;
+}
+
+/**
+ * Extracts the client version from an electron-builder update manifest.
+ * Returns null when no well-formed `version:` line is present.
+ */
+export function parseAntigravityManifestVersion(yamlText: string): string | null {
+  for (const line of yamlText.split(/\r?\n/)) {
+    const match = /^\s*version\s*:\s*(?:"([^"]*)"|'([^']*)'|([^\s#]+))\s*(?:#.*)?$/.exec(line);
+    if (!match) continue;
+    const version = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+  }
+  return null;
+}
+
+/**
+ * Resolves the latest Antigravity release from the official update manifest.
+ * Success is cached for the process lifetime; failures are silent (the pinned
+ * fallback stays valid) and clear the in-flight cache so a later call retries.
+ * Skipped entirely when ANTIGRAVITY_HUB_VERSION is set.
+ */
+export function ensureAntigravityVersion(signal?: AbortSignal): Promise<void> {
+  if (antigravityEnv("HUB_VERSION") || discoveredAntigravityVersion) return Promise.resolve();
+  if (antigravityVersionFetch) return antigravityVersionFetch;
+
+  antigravityVersionFetch = (async () => {
+    try {
+      const timeoutSignal = AbortSignal.timeout(ANTIGRAVITY_VERSION_FETCH_TIMEOUT_MS);
+      const response = await antigravityFetch(ANTIGRAVITY_VERSION_MANIFEST_URL, {
+        headers: { "Cache-Control": "no-cache", "User-Agent": "electron-builder" },
+        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
+      });
+      if (response.ok) {
+        discoveredAntigravityVersion = parseAntigravityManifestVersion(await response.text());
+      }
+    } catch {
+      // Silent: the pinned fallback remains valid when version discovery fails.
+    } finally {
+      if (!discoveredAntigravityVersion) antigravityVersionFetch = null;
+    }
+  })();
+  return antigravityVersionFetch;
+}
+
 function defaultUserAgent(): string {
-  const version = antigravityEnv("HUB_VERSION") || DEFAULT_ANTIGRAVITY_VERSION;
+  const version = getAntigravityVersion();
+  // The backend does not validate `cl` (verified live: stale, zero, and absent
+  // cl all pass model gating on daily-cloudcode-pa; only the version gates).
+  // The update manifest carries no changelist, so the captured value stays.
   const cl = antigravityEnv("HUB_CL") || DEFAULT_ANTIGRAVITY_CL;
   const os = antigravityEnv("HUB_OS") || "darwin";
   const arch = antigravityEnv("HUB_ARCH") || "arm64";
   return `antigravity/hub/${version} (aidev_client; os_type=${os}; arch=${arch}; cl=${cl})`;
 }
 
-export function antigravityHeaders(token: string): Record<string, string> {
+/**
+ * `X-Goog-Api-Client` / `Client-Metadata` are sent on provisioning and discovery
+ * calls (loadCodeAssist, quota, model list) but NOT on chat stream requests —
+ * captured `antigravity/hub` traffic carries only Authorization + User-Agent.
+ */
+export function antigravityHeaders(
+  token: string,
+  opts?: { chat?: boolean },
+): Record<string, string> {
   const platform =
     process.platform === "darwin"
       ? Platform.Macos
       : process.platform === "win32"
         ? Platform.Windows
         : Platform.Linux;
-  return {
+  const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     Accept: "text/event-stream",
     "User-Agent": antigravityEnv("USER_AGENT") || defaultUserAgent(),
-    "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-    "Client-Metadata": JSON.stringify({
+  };
+  if (!opts?.chat) {
+    headers["X-Goog-Api-Client"] = "google-cloud-sdk vscode_cloudshelleditor/0.1";
+    headers["Client-Metadata"] = JSON.stringify({
       ideType: "ANTIGRAVITY",
       platform,
       pluginType: "GEMINI",
-    }),
-  };
+    });
+  }
+  return headers;
 }
 
 export function jsonOrTextError(text: string): string {

@@ -1,5 +1,5 @@
 {
-  "name": "pi-antigravity-native",
+  "name": "antigravity-pi",
   "version": "1.2.0",
   "description": "Google Antigravity Native Provider Extension for Pi CLI with Gemini 3.8, prompt cache session affinity, and trajectory chaining",
   "type": "module",

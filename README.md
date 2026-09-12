@@ -1,4 +1,4 @@
-# Pi Antigravity Native Extension (`pi-antigravity-native`)
+# Pi Antigravity Native Extension (`antigravity-pi`)
 
 Extension tích hợp **Google Antigravity 2.0 Native Provider** dành cho **Pi CLI** (`@mariozechner/pi-coding-agent` / `@earendil-works/pi-coding-agent`).
 
@@ -81,22 +81,23 @@ Extension được xây dựng hoàn toàn bằng **TypeScript Native**, biên d
 - **Không monkey-patching**: Tuyệt đối không can thiệp, vá lỗi hay sửa đổi file trong `node_modules` hay global packages.
 - **Độc lập và an toàn**: Đầy đủ tính năng stream, OAuth PKCE, Undici HTTP Client, schema dereferencing tự thân.
 
-### 8 Cơ chế Tương thích & Tối ưu Giao thức:
+### 9 Cơ chế Tương thích & Tối ưu Giao thức:
 1. **Deterministic 63-bit Session ID & Trajectory Chaining:** Tạo Session ID cố định 63-bit (`deriveAntigravitySessionId`) từ user message đầu tiên và duy trì chuỗi phản hồi `last_execution_id` giúp tối đa hóa tỷ lệ trúng Prompt Cache của Google.
 2. **Keep-Alive HTTP Client & Connection Prewarming:** Quản lý kết nối qua Undici với `keepAliveTimeout: 60s` và tự động gửi `HEAD` request khi khởi động để loại bỏ độ trễ TLS handshake (150–300ms).
 3. **Recursive Schema Dereferencing:** Đệ quy giải phóng toàn bộ `$ref` và `$defs`, loại bỏ các schema keywords không tương thích để ngăn ngừa lỗi `HTTP 400 Bad Request` khi gọi tools.
-4. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` tương thích backend Google Antigravity.
-5. **Payload `requestType: "agent"` & `userAgent: "antigravity"`:** Đảm bảo routing đúng cụm máy chủ Antigravity nội bộ.
-6. **Custom `requestId: "agent-..."`:** Tự sinh `requestId` tương thích với trace logging của Google Cloud Code Assist.
-7. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` khi gọi Claude qua Antigravity bridge.
-8. **Multi-Scope OAuth PKCE & Auto Rotation:** Đăng nhập qua PKCE cổng `51121` với đầy đủ scopes, hỗ trợ Project ID fallback và tự động làm mới token.
+4. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` tương thích backend Google Antigravity; **không chèn identity prompt** khi người dùng không cấu hình system prompt — đúng hành vi client chính thức.
+5. **Sensitive-words Obfuscation:** Tự động tách các cụm từ nhạy cảm (mặc định `RFC 2119`, override qua `ANTIGRAVITY_SENSITIVE_WORDS`) bằng U+200B zero-width space để né matcher literal phía server trả về `429 RESOURCE_EXHAUSTED` trống — cùng mitigation với CLIProxyAPI.
+6. **Client Version Auto-Tracking:** Lấy version client Antigravity mới nhất từ update manifest chính thức khi khởi động (fallback `2.8.0`, override qua `ANTIGRAVITY_HUB_VERSION`) — backend gate model theo version nên version cũ sẽ bị từ chối dần.
+7. **Custom `requestId: "agent/..."`:** Tự sinh `requestId` tương thích với trace logging của Google Cloud Code Assist; **không gửi `requestType`** vì client chính thức bỏ trường này trên consumer Cloud Code (giá trị `"agent"` rơi vào bucket bị throttle cứng).
+8. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` khi gọi Claude qua Antigravity bridge.
+9. **Multi-Scope OAuth PKCE & Auto Refresh:** Đăng nhập qua PKCE cổng `51121` với đầy đủ scopes, hỗ trợ Project ID fallback và tự động làm mới token.
 
 ---
 
 ## 📂 Cấu trúc Dự án
 
 ```text
-pi-antigravity-native/
+antigravity-pi/
 ├── index.ts                       # Root re-export dist/index.js
 ├── package.json                   # Pi manifest ("pi": {"extensions": ["./dist/index.js"]})
 ├── tsconfig.json                  # TypeScript config (ES2022 / NodeNext)
@@ -127,7 +128,7 @@ pi-antigravity-native/
 ```bash
 # Clone vào thư mục extensions của Pi
 mkdir -p ~/.pi/agent/extensions
-git clone https://github.com/minhgv/pi-antigravity-native.git ~/.pi/agent/extensions/antigravity-native
+git clone https://github.com/minhgv/antigravity-pi.git ~/.pi/agent/extensions/antigravity-native
 cd ~/.pi/agent/extensions/antigravity-native
 
 # Cài đặt dependencies và biên dịch TypeScript

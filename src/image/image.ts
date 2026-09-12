@@ -6,7 +6,7 @@ import {
   jsonOrTextError,
   parseApiKey,
 } from "../client/client.js";
-import { AntigravityRequestType, AntigravityUserAgent, GeminiRole } from "../types/enums.js";
+import { AntigravityUserAgent, GeminiRole } from "../types/enums.js";
 import { antigravityFetch } from "../utils/http.js";
 import { safeError } from "../utils/security.js";
 import { antigravityRequestEnvelope, sanitizeText } from "../utils/util.js";
@@ -31,8 +31,7 @@ const IMAGE_MODEL_FALLBACKS = [
   "gemini-3.1-flash-image",
   "gemini-3-pro-image-preview",
 ];
-const IMAGE_SYSTEM_INSTRUCTION =
-  "You are an AI image generator. Generate images based on user descriptions. Focus on creating high-quality, visually appealing images that match the user's request.";
+
 const DEFAULT_IMAGE_DIR = join(".pi", "generated-images");
 const MAX_PROMPT_CHARS = 8000;
 
@@ -43,13 +42,12 @@ export type ImageGenerateRequest = {
   model: string;
   request: {
     contents: Array<{ role: GeminiRole.User; parts: Array<{ text: string }> }>;
-    systemInstruction: { role: GeminiRole.User; parts: Array<{ text: string }> };
+    systemInstruction?: { role: GeminiRole.User; parts: Array<{ text: string }> };
     generationConfig: {
       imageConfig: { aspectRatio: string };
       candidateCount: number;
     };
   };
-  requestType: AntigravityRequestType.Agent;
   userAgent: AntigravityUserAgent.Antigravity;
   requestId: string;
 };
@@ -184,16 +182,11 @@ export function buildImageGenerateRequest(
     model,
     request: {
       contents: [{ role: GeminiRole.User, parts: [{ text: sanitizeText(prompt) }] }],
-      systemInstruction: {
-        role: GeminiRole.User,
-        parts: [{ text: IMAGE_SYSTEM_INSTRUCTION }],
-      },
       generationConfig: {
         imageConfig: { aspectRatio },
         candidateCount: 1,
       },
     },
-    requestType: AntigravityRequestType.Agent,
     userAgent: AntigravityUserAgent.Antigravity,
     requestId: envelope.requestId,
   };
@@ -275,7 +268,7 @@ export async function generateAntigravityImage(
   const preferred = assertSafeImageModel(options.model || DEFAULT_IMAGE_MODEL);
   const models = [preferred, ...IMAGE_MODEL_FALLBACKS.filter((id) => id !== preferred)];
   const creds = parseApiKey(options.apiKey);
-  const headers = antigravityHeaders(creds.token);
+  const headers = antigravityHeaders(creds.token, { chat: true });
 
   let lastError = "no endpoint available";
   for (const model of models) {

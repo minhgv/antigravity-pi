@@ -38,9 +38,11 @@ import {
 } from "../src/utils/security.js";
 import {
 	antigravityRequestEnvelope,
+	antigravitySensitiveWords,
 	clearAntigravitySessions,
 	deriveAntigravitySessionId,
 	getOrCreateAntigravitySession,
+	obfuscateSensitiveWords,
 	persistAntigravitySessions,
 	resetAntigravitySessionMemory,
 	sanitizeText,
@@ -347,14 +349,67 @@ test("buildRequest shapes the Cloud Code Assist envelope", () => {
 	);
 	assert.equal(request.project, "project-1");
 	assert.equal(request.model, "gemini-3.7-flash-high");
-	assert.equal(request.requestType, "agent");
+	assert.ok(!("requestType" in request));
 	assert.equal(request.request.sessionId, "sess-42");
 	assert.match(request.requestId, /^agent\//);
-	assert.deepEqual(request.request.systemInstruction.parts, [{ text: "You are pi." }]);
+	assert.deepEqual(request.request.systemInstruction?.parts, [{ text: "You are pi." }]);
 	assert.equal(request.request.generationConfig?.thinkingConfig?.thinkingLevel, "HIGH");
 	assert.equal(request.request.generationConfig?.maxOutputTokens, 65536);
 	assert.equal(request.request.toolConfig?.functionCallingConfig.mode, "VALIDATED");
 	assert.ok(request.request.tools?.[0]?.functionDeclarations[0]);
+});
+
+test("buildRequest omits systemInstruction when no system prompt is set", () => {
+	const model = fakeModel("gemini-3.7-flash");
+	const request = buildRequest(
+		model,
+		{
+			messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+		} as never,
+		"project-1",
+		{ reasoning: "off" } as never,
+		"gemini-3.7-flash",
+	);
+	assert.equal(request.request.systemInstruction, undefined);
+});
+
+test("buildRequest splits sensitive phrases with a zero-width space", () => {
+	const model = fakeModel("gemini-3.7-flash");
+	const request = buildRequest(
+		model,
+		{
+			systemPrompt: "Obey RFC 2119 keywords exactly.",
+			messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+		} as never,
+		"project-1",
+		{ reasoning: "off" } as never,
+		"gemini-3.7-flash",
+	);
+	const text = request.request.systemInstruction?.parts[0]?.text ?? "";
+	assert.ok(!text.includes("RFC 2119"));
+	assert.ok(text.includes("R\u200bFC 2119"));
+});
+
+test("obfuscateSensitiveWords honors env override and disable", () => {
+	const previous = process.env.ANTIGRAVITY_SENSITIVE_WORDS;
+	try {
+		process.env.ANTIGRAVITY_SENSITIVE_WORDS = "Claude, secrets";
+		const words = antigravitySensitiveWords();
+		assert.ok(words.includes("Claude"));
+		assert.equal(
+			obfuscateSensitiveWords("The Claude Agent SDK has secrets inside.", words),
+			"The C\u200blaude Agent SDK has s\u200becrets inside.",
+		);
+		process.env.ANTIGRAVITY_SENSITIVE_WORDS = "";
+		assert.deepEqual(antigravitySensitiveWords(), []);
+		assert.equal(
+			obfuscateSensitiveWords("Obey RFC 2119.", antigravitySensitiveWords()),
+			"Obey RFC 2119.",
+		);
+	} finally {
+		if (previous === undefined) delete process.env.ANTIGRAVITY_SENSITIVE_WORDS;
+		else process.env.ANTIGRAVITY_SENSITIVE_WORDS = previous;
+	}
 });
 
 test("friendly errors are actionable and redacted", () => {
