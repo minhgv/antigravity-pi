@@ -76,6 +76,10 @@ import {
   type AntigravitySessionState,
 } from "../utils/util.js";
 import { antigravityFetch } from "../utils/http.js";
+import {
+  recordThoughtSignature,
+  resolveThoughtSignatureWithFallback,
+} from "./thought-signature.js";
 
 export { ANTIGRAVITY_API };
 
@@ -96,10 +100,9 @@ function toolCallIdNeeded(modelId: string, runtimeModel: string): boolean {
   );
 }
 
-const base64SignaturePattern = /^[A-Za-z0-9+/]+={0,2}$/;
+const base64SignaturePattern = /^[A-Za-z0-9+/_-]+={0,2}$/;
 function isValidThoughtSignature(signature?: string): boolean {
   if (!signature || typeof signature !== "string" || signature.length === 0) return false;
-  if (signature.length % 4 !== 0) return false;
   return base64SignaturePattern.test(signature);
 }
 
@@ -176,6 +179,7 @@ export function convertMessages(
   model: Model<Api>,
   context: Context,
   runtimeModel: string,
+  sessionId?: string,
 ): GeminiContent[] {
   const contents: GeminiContent[] = [];
   const requiresSig = geminiRequiresThoughtSignature(runtimeModel);
@@ -191,12 +195,23 @@ export function convertMessages(
       const parts: GeminiPart[] = [];
       const isSameModel = msg.provider === PROVIDER_ID && msg.model === model.id;
       const toolCalls = msg.content.filter((b): b is ToolCall => b.type === "toolCall");
-      const firstCallHasSig =
+      let firstCallHasSig =
         toolCalls.length > 0 && isValidThoughtSignature(toolCalls[0]?.thoughtSignature);
+      if (!firstCallHasSig && toolCalls.length > 0 && sessionId) {
+        const resolved = resolveThoughtSignatureWithFallback(
+          sessionId,
+          toolCalls[0]?.id,
+          toolCalls[0]?.name,
+          { fallback: true },
+        );
+        if (isValidThoughtSignature(resolved)) {
+          firstCallHasSig = true;
+        }
+      }
       // The real client requires a thoughtSignature only on the FIRST
       // functionCall of a model turn; later calls may be unsigned. A group is
       // replayable when the first call carries a valid signature.
-      const groupIsSigned = isSameModel && firstCallHasSig;
+      const groupIsSigned = (isSameModel || Boolean(sessionId)) && firstCallHasSig;
 
       for (const block of msg.content) {
         if (block.type === "text") {
@@ -219,6 +234,15 @@ export function convertMessages(
             ...(block.thinkingSignature ? { thoughtSignature: block.thinkingSignature } : {}),
           });
         } else if (block.type === "toolCall") {
+          let callSig = block.thoughtSignature;
+          if (!isValidThoughtSignature(callSig) && sessionId) {
+            callSig = resolveThoughtSignatureWithFallback(
+              sessionId,
+              block.id,
+              block.name,
+              { fallback: true },
+            );
+          }
           if (requiresSig && !groupIsSigned) {
             const rawId = block.id || "";
             const argsText = (() => {
@@ -243,8 +267,8 @@ export function convertMessages(
                   ? { id: sanitizeToolCallId(block.id || "", block.name) }
                   : {}),
               },
-              ...(isValidThoughtSignature(block.thoughtSignature)
-                ? { thoughtSignature: block.thoughtSignature }
+              ...(isValidThoughtSignature(callSig)
+                ? { thoughtSignature: callSig }
                 : {}),
             });
           }
@@ -467,8 +491,12 @@ export function buildRequest(
   runtimeModel: string,
   sessionState?: AntigravitySessionState,
 ): AntigravityGenerateRequest {
+  const isClaude = model.id.startsWith("claude-") || runtimeModel.startsWith("claude-");
+  const sid = options.sessionId || deriveAntigravitySessionId(context);
+  const state = sessionState ?? getOrCreateAntigravitySession(sid);
+
   const request: GeminiRequestBody = {
-    contents: convertMessages(model, context, runtimeModel),
+    contents: convertMessages(model, context, runtimeModel, sid),
   };
   // The real client forwards the caller's system prompt verbatim and injects
   // nothing when it is absent — no Antigravity identity prompt is added.
@@ -500,7 +528,6 @@ export function buildRequest(
   }
   if (Object.keys(generationConfig).length) request.generationConfig = generationConfig;
 
-  const isClaude = model.id.startsWith("claude-") || runtimeModel.startsWith("claude-");
   const tools = convertTools(context.tools, isClaude || model.id.startsWith("gpt-oss-"));
   if (tools) {
     request.tools = tools;
@@ -517,14 +544,26 @@ export function buildRequest(
       functionCallingConfig: { mode: GeminiToolCallingMode.Validated },
     };
   }
+  // Google One AI Credits Protection:
+  // Cloud Code Assist will deduct from paid Google One AI Credits if `enabledCreditTypes`
+  // includes "GOOGLE_ONE_AI". By default, strip this field to protect user credits.
+  // Opt-in only when explicitly allowed via PI_AGY_ENABLE_G1_CREDITS=1 or OPENCODE_AGY_ENABLE_G1_CREDITS=1.
+  const enableG1Credits =
+    process.env.PI_AGY_ENABLE_G1_CREDITS === "1" ||
+    process.env.OPENCODE_AGY_ENABLE_G1_CREDITS === "1";
+  if (options.enabledCreditTypes) {
+    if (enableG1Credits) {
+      request.enabledCreditTypes = options.enabledCreditTypes;
+    }
+  } else if (!enableG1Credits) {
+    delete (request as Record<string, unknown>).enabledCreditTypes;
+  }
 
-  const sid = options.sessionId || deriveAntigravitySessionId(context);
-  const state = sessionState ?? getOrCreateAntigravitySession(sid);
   const envelope = antigravityRequestEnvelope(runtimeModel, isClaude, state);
   request.sessionId = envelope.sessionId;
   request.labels = envelope.labels;
 
-  return {
+  const result: AntigravityGenerateRequest = {
     project: projectId,
     model: runtimeModel,
     request,
@@ -533,6 +572,10 @@ export function buildRequest(
     userAgent: AntigravityUserAgent.Antigravity,
     requestId: envelope.requestId,
   };
+  if (enableG1Credits && options.enabledCreditTypes) {
+    result.enabledCreditTypes = options.enabledCreditTypes;
+  }
+  return result;
 }
 
 /** Exported for unit tests. */
@@ -541,6 +584,64 @@ export function mapStopReason(reason: string | undefined): StopReason {
   if (reason === "MAX_TOKENS") return StopReason.Length;
   return reason ? StopReason.Error : StopReason.Stop;
 }
+export type AntigravityRateLimitReason =
+  | "QUOTA_EXHAUSTED"
+  | "RATE_LIMIT_EXCEEDED"
+  | "INSUFFICIENT_G1_CREDITS_BALANCE";
+
+const GOOGLE_RPC_ERROR_INFO_TYPE = "type.googleapis.com/google.rpc.ErrorInfo";
+const ANTIGRAVITY_MODEL_QUOTA_PATTERN = /\bexhausted your capacity on this model\b/i;
+
+export function parseAntigravityRateLimitReason(
+  errorText: string,
+): AntigravityRateLimitReason | undefined {
+  if (!errorText) return undefined;
+  try {
+    const parsed = JSON.parse(errorText) as Record<string, unknown>;
+    const details = (parsed?.error as Record<string, unknown> | undefined)?.details;
+    if (Array.isArray(details)) {
+      for (const detail of details) {
+        const record = detail as Record<string, unknown>;
+        if (record?.["@type"] !== GOOGLE_RPC_ERROR_INFO_TYPE) continue;
+        const reason = record.reason;
+        if (
+          reason === "QUOTA_EXHAUSTED" ||
+          reason === "RATE_LIMIT_EXCEEDED" ||
+          reason === "INSUFFICIENT_G1_CREDITS_BALANCE"
+        ) {
+          return reason;
+        }
+      }
+    }
+  } catch {
+    // fall through to text matching
+  }
+  if (/INSUFFICIENT_G1_CREDITS_BALANCE/i.test(errorText)) {
+    return "INSUFFICIENT_G1_CREDITS_BALANCE";
+  }
+  if (ANTIGRAVITY_MODEL_QUOTA_PATTERN.test(errorText)) return "QUOTA_EXHAUSTED";
+  return undefined;
+}
+
+export function formatRateLimitWarning(reason: AntigravityRateLimitReason | undefined): string {
+  if (reason === "INSUFFICIENT_G1_CREDITS_BALANCE") {
+    return "Google Antigravity quota exhausted and Google One AI Credits balance is insufficient.";
+  }
+  if (reason === "QUOTA_EXHAUSTED") {
+    const creditsProtected =
+      process.env.PI_AGY_ENABLE_G1_CREDITS !== "1" &&
+      process.env.OPENCODE_AGY_ENABLE_G1_CREDITS !== "1";
+    if (creditsProtected) {
+      return "Google Antigravity model quota exhausted. Google One AI Credits protection is ACTIVE (paid credits will not be charged).";
+    }
+    return "Google Antigravity model quota exhausted.";
+  }
+  if (reason === "RATE_LIMIT_EXCEEDED") {
+    return "Google Antigravity rate limit exceeded. Please wait before retrying.";
+  }
+  return "Google Antigravity request rate limited.";
+}
+
 
 /** Exported for unit tests. */
 export function friendlyAntigravityError(status: number | undefined, text: string): string {
@@ -564,6 +665,13 @@ export function friendlyAntigravityError(status: number | undefined, text: strin
 		return `Antigravity could not find the requested resource. Next: retry or switch models. Backend said: ${msg}`;
 	}
 	if (status === 429) {
+    const reason = parseAntigravityRateLimitReason(text);
+    if (reason === "INSUFFICIENT_G1_CREDITS_BALANCE") {
+      return formatRateLimitWarning(reason);
+    }
+    const creditsProtected =
+      process.env.PI_AGY_ENABLE_G1_CREDITS !== "1" &&
+      process.env.OPENCODE_AGY_ENABLE_G1_CREDITS !== "1";
 		const wait =
 			msg.match(/Resets? in ([^.\n]+)/i)?.[1]?.trim() ||
 			msg.match(/retry after ([0-9]+s)/i)?.[1] ||
@@ -571,7 +679,10 @@ export function friendlyAntigravityError(status: number | undefined, text: strin
 		if (/Individual quota reached/i.test(msg)) {
 			return `Quota reached. Please wait ${wait || "for reset"}. Next: switch models or try again after reset.`;
 		}
-		if (/quota/i.test(msg)) {
+		if (/quota/i.test(msg) || reason === "QUOTA_EXHAUSTED") {
+      if (creditsProtected) {
+        return `Quota reached.${wait ? ` Please wait ${wait}.` : ""} Google One AI Credits protection is ACTIVE. Next: switch models or retry later.`;
+      }
 			return `Quota reached.${wait ? ` Please wait ${wait}.` : ""} Next: switch models or retry later.`;
 		}
 		return `Rate limited by Antigravity. Next: wait a bit and retry.${wait ? ` Reset: ${wait}.` : ""}`;
@@ -749,6 +860,9 @@ export async function streamResponse(
           if (isThinking && currentBlock.type === "thinking") {
             currentBlock.thinking += part.text;
             if (part.thoughtSignature) currentBlock.thinkingSignature = part.thoughtSignature;
+            if (sessionState?.sessionId && part.thoughtSignature) {
+              recordThoughtSignature(sessionState.sessionId, "latest", part.thoughtSignature);
+            }
             stream.push({
               type: "thinking_delta",
               contentIndex: blockIndex(),
@@ -758,6 +872,9 @@ export async function streamResponse(
           } else if (!isThinking && currentBlock.type === "text") {
             currentBlock.text += part.text;
             if (part.thoughtSignature) currentBlock.textSignature = part.thoughtSignature;
+            if (sessionState?.sessionId && part.thoughtSignature) {
+              recordThoughtSignature(sessionState.sessionId, "latest", part.thoughtSignature);
+            }
             stream.push({
               type: "text_delta",
               contentIndex: blockIndex(),
@@ -778,6 +895,10 @@ export async function streamResponse(
             arguments: asToolCallArguments(part.functionCall.args),
             ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}),
           };
+          if (sessionState?.sessionId && part.thoughtSignature) {
+            if (toolCall.id) recordThoughtSignature(sessionState.sessionId, toolCall.id, part.thoughtSignature);
+            if (toolCall.name) recordThoughtSignature(sessionState.sessionId, toolCall.name, part.thoughtSignature);
+          }
           blocks.push(toolCall);
           ensureStarted();
           stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });

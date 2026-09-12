@@ -54,6 +54,7 @@ export type AntigravityApi = typeof ANTIGRAVITY_API;
 // type, so replace the field instead of intersecting.
 export type AntigravityStreamOptions = Omit<SimpleStreamOptions, "toolChoice"> & {
   toolChoice?: ToolChoice | "auto" | "none";
+  enabledCreditTypes?: string[];
 };
 
 export type GeminiTextPart = { text: string; thoughtSignature?: string };
@@ -124,6 +125,7 @@ export type GeminiRequestBody = {
   toolConfig?: GeminiToolConfig;
   sessionId?: string;
   labels?: Record<string, string>;
+  enabledCreditTypes?: string[];
 };
 
 export type AntigravityGenerateRequest = {
@@ -134,6 +136,7 @@ export type AntigravityGenerateRequest = {
   // constrained bucket that returns a detail-free 429 RESOURCE_EXHAUSTED.
   userAgent: AntigravityUserAgent.Antigravity;
   requestId: string;
+  enabledCreditTypes?: string[];
 };
 
 export type StreamPart = {

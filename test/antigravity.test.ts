@@ -14,9 +14,18 @@ import {
 	convertMessages,
 	convertTools,
 	friendlyAntigravityError,
+	formatRateLimitWarning,
 	mapStopReason,
+	parseAntigravityRateLimitReason,
 	streamResponse,
 } from "../src/stream/stream.js";
+import {
+	recordThoughtSignature,
+	getCachedThoughtSignature,
+	resolveThoughtSignatureWithFallback,
+	DEFAULT_THINKING_AG_SIGNATURE,
+	clearThoughtSignatureCache,
+} from "../src/stream/thought-signature.js";
 import {
 	DEFAULT_ENDPOINT,
 	ENDPOINT_FALLBACKS,
@@ -756,4 +765,382 @@ test("image model and aspect ratio validation", () => {
 	assert.throws(() => assertSafeImageModel("gemini-3-pro-image; rm -rf /"), /Unsupported image model/);
 	assert.equal(assertSafeAspectRatio("16:9"), "16:9");
 	assert.throws(() => assertSafeAspectRatio("7:3"), /Unsupported aspect ratio/);
+});
+
+/* ---------------- Google One AI Credits Protection ---------------- */
+
+test("buildRequest strips enabledCreditTypes by default to protect Google One AI credits", () => {
+	delete process.env.PI_AGY_ENABLE_G1_CREDITS;
+	delete process.env.OPENCODE_AGY_ENABLE_G1_CREDITS;
+	const req = buildRequest(
+		fakeModel("gemini-3.7-flash"),
+		{ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] } as never,
+		"test-proj",
+		{ enabledCreditTypes: ["GOOGLE_ONE_AI"] },
+		"gemini-3.7-flash-high",
+	);
+	assert.equal(req.request.enabledCreditTypes, undefined, "Expected enabledCreditTypes stripped from request body");
+	assert.equal(req.enabledCreditTypes, undefined, "Expected enabledCreditTypes stripped from root envelope");
+});
+
+test("buildRequest allows enabledCreditTypes when PI_AGY_ENABLE_G1_CREDITS=1", () => {
+	process.env.PI_AGY_ENABLE_G1_CREDITS = "1";
+	try {
+		const req = buildRequest(
+			fakeModel("gemini-3.7-flash"),
+			{ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] } as never,
+			"test-proj",
+			{ enabledCreditTypes: ["GOOGLE_ONE_AI"] },
+			"gemini-3.7-flash-high",
+		);
+		assert.deepEqual(req.request.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
+		assert.deepEqual(req.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
+	} finally {
+		delete process.env.PI_AGY_ENABLE_G1_CREDITS;
+	}
+});
+
+test("parseAntigravityRateLimitReason classifies error payloads accurately", () => {
+	const g1Error = JSON.stringify({
+		error: {
+			code: 429,
+			message: "Resource exhausted",
+			details: [
+				{
+					"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+					reason: "INSUFFICIENT_G1_CREDITS_BALANCE",
+					domain: "cloudcode-pa.googleapis.com",
+				},
+			],
+		},
+	});
+	assert.equal(parseAntigravityRateLimitReason(g1Error), "INSUFFICIENT_G1_CREDITS_BALANCE");
+
+	const quotaError = JSON.stringify({
+		error: {
+			code: 429,
+			message: "Resource exhausted",
+			details: [
+				{
+					"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+					reason: "QUOTA_EXHAUSTED",
+					domain: "cloudcode-pa.googleapis.com",
+				},
+			],
+		},
+	});
+	assert.equal(parseAntigravityRateLimitReason(quotaError), "QUOTA_EXHAUSTED");
+
+	assert.equal(
+		parseAntigravityRateLimitReason("You have exhausted your capacity on this model."),
+		"QUOTA_EXHAUSTED",
+	);
+	assert.equal(
+		parseAntigravityRateLimitReason("Raw string with INSUFFICIENT_G1_CREDITS_BALANCE inside"),
+		"INSUFFICIENT_G1_CREDITS_BALANCE",
+	);
+	assert.equal(parseAntigravityRateLimitReason("Unknown error text"), undefined);
+});
+
+test("formatRateLimitWarning formats Google One credits and quota warnings", () => {
+	delete process.env.PI_AGY_ENABLE_G1_CREDITS;
+	delete process.env.OPENCODE_AGY_ENABLE_G1_CREDITS;
+	assert.match(
+		formatRateLimitWarning("INSUFFICIENT_G1_CREDITS_BALANCE"),
+		/Google One AI Credits balance is insufficient/i,
+	);
+	assert.match(
+		formatRateLimitWarning("QUOTA_EXHAUSTED"),
+		/Google One AI Credits protection is ACTIVE/i,
+	);
+	assert.match(
+		friendlyAntigravityError(429, "INSUFFICIENT_G1_CREDITS_BALANCE"),
+		/Google One AI Credits balance is insufficient/i,
+	);
+});
+
+/* ---------------- Thought Signature Replay Cache & Fallback ---------------- */
+
+test("thought signature cache records and retrieves signatures by sessionId and identifier", () => {
+	clearThoughtSignatureCache();
+	const sid = "test-session-123";
+	const sig = "aW52YWxpZF9zaWduYXR1cmVfZXhhbXBsZV8xMjM0NTY3OA==";
+
+	recordThoughtSignature(sid, "call_999", sig);
+	recordThoughtSignature(sid, "bash", sig);
+
+	assert.equal(getCachedThoughtSignature(sid, "call_999"), sig);
+	assert.equal(getCachedThoughtSignature(sid, "bash"), sig);
+	assert.equal(getCachedThoughtSignature(sid, "nonexistent"), undefined);
+	assert.equal(getCachedThoughtSignature(undefined, "call_999"), undefined);
+
+	clearThoughtSignatureCache();
+	assert.equal(getCachedThoughtSignature(sid, "call_999"), undefined);
+});
+
+test("resolveThoughtSignatureWithFallback resolves cached or DEFAULT_THINKING_AG_SIGNATURE", () => {
+	clearThoughtSignatureCache();
+	const sid = "session-fallback-abc";
+	const cachedSig = "Y2FjaGVkX3NpZ18xMjM0NTY3OA==";
+
+	// Uncached with fallback
+	const fallbackSig = resolveThoughtSignatureWithFallback(sid, "call_orphan", "read");
+	assert.equal(fallbackSig, DEFAULT_THINKING_AG_SIGNATURE);
+
+	// Uncached without fallback
+	const noFallback = resolveThoughtSignatureWithFallback(sid, "call_orphan", "read", { fallback: false });
+	assert.equal(noFallback, undefined);
+
+	// Cached callId
+	recordThoughtSignature(sid, "call_orphan", cachedSig);
+	const recovered = resolveThoughtSignatureWithFallback(sid, "call_orphan", "read");
+	assert.equal(recovered, cachedSig);
+
+	clearThoughtSignatureCache();
+});
+
+test("convertMessages with sessionId rescues orphaned tool calls with fallback signature", () => {
+	clearThoughtSignatureCache();
+	const sessionId = "session_rescue_test";
+	const context = {
+		messages: [
+			{ role: "user", content: [{ type: "text", text: "do something" }] },
+			{
+				role: "assistant",
+				provider: PROVIDER_ID,
+				model: "gemini-3.7-flash",
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "call_orphan_1", name: "bash", arguments: { command: "ls" } }],
+			},
+			{
+				role: "toolResult",
+				toolCallId: "call_orphan_1",
+				toolName: "bash",
+				isError: false,
+				content: [{ type: "text", text: "file.txt" }],
+			},
+		],
+	} as never;
+
+	// Without sessionId, unsigned tool call is dropped to user observation (preserving existing behavior)
+	const withoutSid = convertMessages(fakeModel("gemini-3.7-flash"), context, "gemini-3.7-flash-high");
+	const partsWithout = withoutSid.flatMap((c) => c.parts);
+	assert.ok(!partsWithout.some((p) => "functionCall" in p));
+
+	// With sessionId, fallback DEFAULT_THINKING_AG_SIGNATURE rescues the tool call as a valid functionCall!
+	const withSid = convertMessages(fakeModel("gemini-3.7-flash"), context, "gemini-3.7-flash-high", sessionId);
+	const partsWith = withSid.flatMap((c) => c.parts);
+	const fc = partsWith.find((p): p is { functionCall: unknown; thoughtSignature?: string } => "functionCall" in p);
+	assert.ok(fc, "Expected functionCall to be preserved with fallback signature");
+	assert.equal(fc.thoughtSignature, DEFAULT_THINKING_AG_SIGNATURE);
+
+	clearThoughtSignatureCache();
+});
+
+test("convertMessages with sessionId restores cached signature for replay turns", () => {
+	clearThoughtSignatureCache();
+	const sessionId = "session_replay_test";
+	const cachedSig = "cHJldmlvdXNfc2lnbmF0dXJlX2NhY2hlZF8xMjM0NTY3OA==";
+	recordThoughtSignature(sessionId, "call_cached_1", cachedSig);
+
+	const context = {
+		messages: [
+			{ role: "user", content: [{ type: "text", text: "run command" }] },
+			{
+				role: "assistant",
+				provider: PROVIDER_ID,
+				model: "gemini-3.7-flash",
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "call_cached_1", name: "exec", arguments: { cmd: "pwd" } }],
+			},
+			{
+				role: "toolResult",
+				toolCallId: "call_cached_1",
+				toolName: "exec",
+				isError: false,
+				content: [{ type: "text", text: "/home" }],
+			},
+		],
+	} as never;
+
+	const contents = convertMessages(fakeModel("gemini-3.7-flash"), context, "gemini-3.7-flash-high", sessionId);
+	const parts = contents.flatMap((c) => c.parts);
+	const fc = parts.find((p): p is { functionCall: unknown; thoughtSignature?: string } => "functionCall" in p);
+	assert.ok(fc, "Expected functionCall to be preserved with cached signature");
+	assert.equal(fc.thoughtSignature, cachedSig);
+
+	clearThoughtSignatureCache();
+});
+
+test("buildRequest allows enabledCreditTypes when OPENCODE_AGY_ENABLE_G1_CREDITS=1", () => {
+	process.env.OPENCODE_AGY_ENABLE_G1_CREDITS = "1";
+	try {
+		const req = buildRequest(
+			fakeModel("gemini-3.7-flash"),
+			{ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] } as never,
+			"test-proj",
+			{ enabledCreditTypes: ["GOOGLE_ONE_AI"] },
+			"gemini-3.7-flash-high",
+		);
+		assert.deepEqual(req.request.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
+		assert.deepEqual(req.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
+	} finally {
+		delete process.env.OPENCODE_AGY_ENABLE_G1_CREDITS;
+	}
+});
+
+test("parseAntigravityRateLimitReason handles malformed JSON and arbitrary RPC error structures", () => {
+	assert.equal(parseAntigravityRateLimitReason(""), undefined);
+	assert.equal(parseAntigravityRateLimitReason("   "), undefined);
+	assert.equal(parseAntigravityRateLimitReason("{ malformed json"), undefined);
+	assert.equal(parseAntigravityRateLimitReason(JSON.stringify({})), undefined);
+	assert.equal(parseAntigravityRateLimitReason(JSON.stringify({ error: {} })), undefined);
+	assert.equal(parseAntigravityRateLimitReason(JSON.stringify({ error: { details: "not an array" } })), undefined);
+	assert.equal(
+		parseAntigravityRateLimitReason(
+			JSON.stringify({
+				error: {
+					details: [
+						{ "@type": "type.googleapis.com/google.rpc.BadRequest", reason: "QUOTA_EXHAUSTED" },
+						{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "UNKNOWN_REASON" },
+					],
+				},
+			}),
+			undefined,
+		),
+		undefined,
+	);
+});
+
+test("friendlyAntigravityError adapts quota messaging based on credit protection state", () => {
+	// Protection enabled
+	delete process.env.PI_AGY_ENABLE_G1_CREDITS;
+	delete process.env.OPENCODE_AGY_ENABLE_G1_CREDITS;
+	const protectedMsg = friendlyAntigravityError(429, JSON.stringify({
+		error: { details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "QUOTA_EXHAUSTED" }] }
+	}));
+	assert.match(protectedMsg, /Google One AI Credits protection is ACTIVE/i);
+
+	// Protection disabled
+	process.env.PI_AGY_ENABLE_G1_CREDITS = "1";
+	try {
+		const unprotectedMsg = friendlyAntigravityError(429, JSON.stringify({
+			error: { details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "QUOTA_EXHAUSTED" }] }
+		}));
+		assert.doesNotMatch(unprotectedMsg, /protection is ACTIVE/i);
+		assert.match(unprotectedMsg, /Quota reached/i);
+	} finally {
+		delete process.env.PI_AGY_ENABLE_G1_CREDITS;
+	}
+});
+
+test("thought signature cache gracefully rejects invalid and empty arguments", () => {
+	clearThoughtSignatureCache();
+	recordThoughtSignature("", "call_1", "valid_signature_abc");
+	recordThoughtSignature("sid_1", "", "valid_signature_abc");
+	recordThoughtSignature("sid_1", "call_1", "");
+	assert.equal(getCachedThoughtSignature("sid_1", "call_1"), undefined);
+	assert.equal(getCachedThoughtSignature("", "call_1"), undefined);
+	assert.equal(getCachedThoughtSignature("sid_1", ""), undefined);
+});
+
+test("thought signature cache enforces FIFO eviction when capacity is exceeded", () => {
+	clearThoughtSignatureCache();
+	const sid = "session_evict_test";
+	// Populate 2048 entries
+	for (let i = 0; i < 2048; i++) {
+		recordThoughtSignature(sid, `call_${i}`, `sig_${i}`);
+	}
+	assert.equal(getCachedThoughtSignature(sid, "call_0"), "sig_0");
+
+	// Insert 2049th entry, which should evict call_0
+	recordThoughtSignature(sid, "call_2048", "sig_2048");
+	assert.equal(getCachedThoughtSignature(sid, "call_0"), undefined, "Oldest entry should be evicted");
+	assert.equal(getCachedThoughtSignature(sid, "call_1"), "sig_1", "Second entry should still exist");
+	assert.equal(getCachedThoughtSignature(sid, "call_2048"), "sig_2048", "Newest entry should exist");
+	clearThoughtSignatureCache();
+});
+
+test("resolveThoughtSignatureWithFallback prefers callId over toolName", () => {
+	clearThoughtSignatureCache();
+	const sid = "session_precedence_test";
+	recordThoughtSignature(sid, "call_specific", "call_specific_sig");
+	recordThoughtSignature(sid, "tool_common", "tool_common_sig");
+
+	// CallId matches
+	assert.equal(
+		resolveThoughtSignatureWithFallback(sid, "call_specific", "tool_common"),
+		"call_specific_sig",
+	);
+
+	// CallId uncached, fallback to toolName
+	assert.equal(
+		resolveThoughtSignatureWithFallback(sid, "call_other", "tool_common"),
+		"tool_common_sig",
+	);
+
+	clearThoughtSignatureCache();
+});
+
+test("convertMessages handles parallel tool calls in single turn with mixed signatures", () => {
+	clearThoughtSignatureCache();
+	const sessionId = "session_parallel_test";
+	recordThoughtSignature(sessionId, "call_parallel_1", "sig_parallel_1_recorded");
+
+	const context = {
+		messages: [
+			{ role: "user", content: [{ type: "text", text: "run both" }] },
+			{
+				role: "assistant",
+				provider: PROVIDER_ID,
+				model: "gemini-3.7-flash",
+				stopReason: "toolUse",
+				content: [
+					{ type: "toolCall", id: "call_parallel_1", name: "fetch", arguments: { url: "a.com" } },
+					{ type: "toolCall", id: "call_parallel_2", name: "fetch", arguments: { url: "b.com" } },
+				],
+			},
+			{ role: "toolResult", toolCallId: "call_parallel_1", toolName: "fetch", content: [{ type: "text", text: "ok1" }] },
+			{ role: "toolResult", toolCallId: "call_parallel_2", toolName: "fetch", content: [{ type: "text", text: "ok2" }] },
+		],
+	} as never;
+
+	const contents = convertMessages(fakeModel("gemini-3.7-flash"), context, "gemini-3.7-flash-high", sessionId);
+	const parts = contents.flatMap((c) => c.parts);
+	const functionCalls = parts.filter((p): p is { functionCall: { id?: string; name: string }; thoughtSignature?: string } => "functionCall" in p);
+
+	assert.equal(functionCalls.length, 2, "Expected both parallel tool calls preserved");
+	assert.equal(functionCalls[0].thoughtSignature, "sig_parallel_1_recorded", "First call should recover cached signature");
+	assert.equal(functionCalls[1].thoughtSignature, DEFAULT_THINKING_AG_SIGNATURE, "Second call should receive fallback signature");
+
+	clearThoughtSignatureCache();
+});
+
+test("convertMessages rescues tool calls across model switch during conversation", () => {
+	clearThoughtSignatureCache();
+	const sessionId = "session_switch_model_test";
+
+	const context = {
+		messages: [
+			{ role: "user", content: [{ type: "text", text: "run task" }] },
+			{
+				role: "assistant",
+				provider: "other-provider",
+				model: "gemini-2.5-flash", // Different model from earlier in history
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "call_switched_1", name: "grep", arguments: { pattern: "foo" } }],
+			},
+			{ role: "toolResult", toolCallId: "call_switched_1", toolName: "grep", content: [{ type: "text", text: "match" }] },
+		],
+	} as never;
+
+	// When replaying with gemini-3.7-flash and sessionId, the tool call from gemini-2.5-flash is rescued!
+	const contents = convertMessages(fakeModel("gemini-3.7-flash"), context, "gemini-3.7-flash-high", sessionId);
+	const parts = contents.flatMap((c) => c.parts);
+	const fc = parts.find((p): p is { functionCall: unknown; thoughtSignature?: string } => "functionCall" in p);
+
+	assert.ok(fc, "Tool call from different model should be rescued with fallback signature");
+	assert.equal(fc.thoughtSignature, DEFAULT_THINKING_AG_SIGNATURE);
+
+	clearThoughtSignatureCache();
 });
