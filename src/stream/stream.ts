@@ -1120,7 +1120,7 @@ export function streamAntigravity(
           }
 
           if (response?.ok && probe) break;
-          if (response?.status === 404) {
+          if (response?.status === 404 || (response?.status === 429 && (process.env.PI_AGY_AUTO_FALLBACK === "1" || process.env.OPENCODE_AGY_AUTO_FALLBACK === "1"))) {
             if (candIdx + 1 < runtimeCandidates.length) {
               continue;
             }
