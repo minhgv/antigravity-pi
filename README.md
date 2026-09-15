@@ -1,127 +1,167 @@
 # Pi Antigravity Native Extension (`antigravity-pi`)
 
-Extension tích hợp **Google Antigravity 2.0 Native Provider** dành cho **Pi CLI** (`@mariozechner/pi-coding-agent` / `@earendil-works/pi-coding-agent`).
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![Pi Extension](https://img.shields.io/badge/Pi%20Extension-100%25%20Native-brightgreen.svg)](https://github.com/mariozechner/pi-coding-agent)
+[![Tests](https://img.shields.io/badge/Tests-68%2F68%20Passing-success.svg)](test/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Cross-platform (macOS + Linux):**
-> - **Vendor self-contained**: Chạy độc lập trên mọi nền tảng mà không cần vá (patch) `node_modules`.
-> - **Fallback patch toàn cục**: Tuỳ chọn chèn provider vào `dist/` pi-ai global với đầy đủ các bản vá tương thích (`supportsXhigh`, `createFauxCore`, `api-registry`...).
+Extension tích hợp **Google Antigravity Native Provider** dành cho **Pi CLI** (`@mariozechner/pi-coding-agent` / `@earendil-works/pi-coding-agent`).
 
-Provider `google-antigravity` kết nối trực tiếp **Cloud Code Assist API** của Google (`*.cloudcode-pa.googleapis.com`) qua OAuth 2.0 PKCE. Cơ chế native tool calling chạy mượt mà trên động cơ `pi-ai`, hỗ trợ trọn vẹn toàn bộ công cụ cốt lõi (`read`, `write`, `edit`, `bash`) và subagents.
+Provider `antigravity` (alias `google-antigravity`) kết nối trực tiếp đến **Cloud Code Assist API** của Google (`*.cloudcode-pa.googleapis.com`) qua OAuth 2.0 PKCE. Cơ chế native tool calling chạy mượt mà trên động cơ `pi-ai`, hỗ trợ trọn vẹn toàn bộ công cụ cốt lõi (`read`, `write`, `edit`, `bash`), multi-turn streaming, subagents, và sinh ảnh Imagen/Gemini.
 
 ---
 
-- ⚡ **Pure Native TypeScript Extension**: Chạy độc lập 100%, tuân thủ chuẩn Extension API của Pi (`dist/index.js`), không monkey-patch hay sửa đổi `node_modules` hệ thống.
-- ⚡ **Prompt Cache Affinity & Trajectory Chaining**: Tạo 63-bit deterministic session ID từ user turn đầu tiên và xâu chuỗi `last_execution_id` giữa các turns, giúp tăng tỷ lệ hit prompt cache trên Google backend, giảm token input và tăng tốc phản hồi.
-- 🚀 **Keep-Alive HTTP Connection & Prewarming**: Sử dụng custom Undici dispatcher (`keepAliveTimeout: 60s`) kết hợp kỹ thuật connection prewarming (`HEAD` request khi khởi động) để loại bỏ độ trễ TLS handshake ở các tool calls kế tiếp.
-- 🧠 **Hỗ trợ Đa Dòng Mô Hình**: Hỗ trợ đầy đủ Gemini 3.8/3.7/3.6/3.5/3.1, Claude Sonnet/Opus 4.6 (Thinking), và GPT-OSS 120B kèm thinking level mapping (`low`, `medium`, `high`) và token clamping tự động.
-- 🔑 **OAuth 2.0 PKCE & Headless Fallback**: Đăng nhập nhanh chóng, hỗ trợ headless paste URL cho môi trường SSH/VPS/Docker, tự động phân giải `projectId` thật của tài khoản Google.
-- 🛡️ **Tự động Dereference Schema & Chuẩn Hóa Tool Calling**: Tự động đệ quy giải quyết `$ref`/`$defs` và loại bỏ các schema keywords không tương thích với Gemini backend.
-- 🛠️ **Slash Commands Tích Hợp Sẵn**:
-  - `/antigravity.usage`: Xem hạn mức quota theo thời gian thực (5h, weekly pool, thời gian reset).
-  - `/antigravity.doctor`: Chẩn đoán trạng thái OAuth, endpoint tốt nhất và độ trễ mạng.
-  - `/antigravity.models`: Xem danh sách toàn bộ các mô hình backend hiện có.
-  - `/antigravity.image`: Sinh ảnh trực tiếp từ terminal qua mô hình Imagen / Gemini Image.
-- 🧪 **Bộ Test Suite 42/42 Tests**: Bộ kiểm thử tự động toàn diện bao phủ toàn bộ stream, auth, cache, network và schema.
+## ✨ Điểm Nổi Bật (Key Features)
 
-## 📋 Danh sách Models khả dụng (Available Models)
+- ⚡ **Pure Native TypeScript Extension**: Chạy độc lập 100%, tuân thủ chuẩn Extension API của Pi (`dist/index.js`), tuyệt đối không monkey-patch hay sửa đổi `node_modules` hệ thống.
+- 🛡️ **Bảo Vệ Google One AI Credits**: Tự động loại bỏ `enabledCreditTypes` ("GOOGLE_ONE_AI") theo mặc định để ngăn trừ tiền credits đã mua của tài khoản Google One. Tuỳ chọn bật/tắt an toàn qua biến môi trường.
+- 🧬 **Thought Signature Replay Cache & Fallback**: Giải quyết triệt để lỗi `HTTP 400 Bad Request` (*"Missing thought signature"* / *"Invalid signature"*) trên các mô hình Gemini 3+ và reasoning models khi gọi tool qua nhiều turns hoặc chuyển đổi model giữa chừng.
+- 🔗 **Prompt Cache Affinity & Trajectory Chaining**: Tạo 63-bit deterministic session ID (`deriveAntigravitySessionId`) từ user turn đầu tiên và xâu chuỗi `last_execution_id` giữa các turns, giúp tối đa hóa tỷ lệ trúng Prompt Cache trên hạ tầng Google, tiết kiệm token và tăng tốc phản hồi.
+- 🥷 **Sensitive-Words Obfuscation**: Tự động chèn ký tự zero-width space (U+200B) vào các cụm từ nhạy cảm (như `RFC 2119`, `<system-directive>`, `conventions`...) nhằm vượt qua bộ lọc literal matcher phía máy chủ gây lỗi `429 RESOURCE_EXHAUSTED` ảo.
+- 🔄 **Intelligent Retry & Auto Fallback**: Tự động trích xuất độ trễ chờ qua `extractRetryDelay` (xử lý `Retry-After`, `x-ratelimit-reset-after`, và inline JSON `retryDelay`), áp dụng jitter sleep khi bị rate limit, và tuỳ chọn tự động fallback model khi gặp mã lỗi 404/429.
+- 🎭 **Tool Cloaking & Decoy Tools**: Hỗ trợ ngụy trang tên công cụ với hậu tố `_ide` (`PI_AGY_CLOAK_TOOLS=1`) và chèn các decoy tools (`PI_AGY_DECOY_TOOLS=1`) khi cần thiết.
+- 🚀 **Keep-Alive HTTP Connection & Prewarming**: Sử dụng custom Undici dispatcher (`keepAliveTimeout: 60s`) kết hợp kỹ thuật prewarming kết nối (`HEAD` request khi khởi động) để loại bỏ độ trễ TLS handshake (150–300ms).
+- 💾 **Hệ Thống Cache Đa Tầng**:
+  - **Session State Cache**: Lưu trữ trạng thái phiên xuống ổ đĩa (`~/.pi/agent/cache/antigravity-sessions.json`) với cơ chế LRU eviction (>200 sessions).
+  - **Model Cache**: Tự động cache thông tin runtime models (TTL 30 phút, in-flight request deduplication).
+  - **Project ID Cache**: Tự động cache Project ID đã phân giải (TTL 30 phút, LRU).
+- 🎨 **Image Generation Sẵn Có**: Slash command `/antigravity.image` và agent tool `generate_image` giúp sinh ảnh trực tiếp từ terminal qua mô hình Imagen / Gemini Image.
+- 🛠️ **Bộ Công Cụ Diagnostics Toàn Diện**: `/antigravity.usage`, `/antigravity.doctor`, `/antigravity.models`.
+- 🧪 **Bộ Test Suite 68/68 Tests**: Kiểm thử tự động toàn diện bao phủ toàn bộ stream, auth, cache, network, security, retry delays và schema transformations.
 
-Provider `google-antigravity` cung cấp danh mục 20 mô hình Gemini active tối ưu cho lập trình:
+---
 
-### 🚀 Dòng Gemini 3.8 Flash (Sẵn sàng đón đầu)
-| Model ID | Context Window | Max Output | Reasoning | Thinking Level | Mô tả |
+## 📋 Danh Sách Models Khả Dụng (Available Models)
+
+Extension cung cấp danh mục các mô hình Google Antigravity active tối ưu cho lập trình:
+
+| Model ID | Context Window | Max Output | Reasoning Support | Thinking Levels Hỗ Trợ | Mô Tả & Backend Runtime Mapping |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| `gemini-3.8-flash` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.8 Flash bản tiêu chuẩn (sàn thinking LOW) |
-| `gemini-3.8-flash-high` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.8 Flash với tư duy chuyên sâu mức High |
-| `gemini-3.8-flash-medium` | 1,048,576 (1M) | 65,535 | ✅ Có | MEDIUM | Gemini 3.8 Flash với tư duy cân bằng mức Medium |
-| `gemini-3.8-flash-low` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.8 Flash với tư duy phản hồi nhanh mức Low |
-
-### 🌟 Gemini 3.7 Flash (Adaptive Thinking)
-| Model ID | Context Window | Max Output | Reasoning | Thinking Level | Mô tả |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| `gemini-3.7-flash-high` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.7 Flash với tư duy chuyên sâu mức High |
-| `gemini-3.7-flash-medium` | 1,048,576 (1M) | 65,535 | ✅ Có | MEDIUM | Gemini 3.7 Flash với tư duy cân bằng mức Medium |
-| `gemini-3.7-flash-low` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.7 Flash với tư duy phản hồi nhanh mức Low |
-
-### ⚡ Gemini 3.1 Pro & Gemini 3.x Flash
-| Model ID | Context Window | Max Output | Reasoning | Thinking Level | Ghi chú |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| `gemini-pro-agent` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | **Model mặc định** (Gemini 3.1 Pro High) |
-| `gemini-3.1-pro-high` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.1 Pro High (Alias $\rightarrow$ `gemini-pro-agent`) |
-| `gemini-3.1-pro-low` | 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.1 Pro chế độ Low thinking |
-| `gemini-3.6-flash-high` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.6 Flash mức tư duy High |
-| `gemini-3.6-flash-medium` | 1,048,576 (1M) | 65,535 | ❌ Không | MEDIUM | Gemini 3.6 Flash mức tư duy Medium |
-| `gemini-3.6-flash-low` | 1,048,576 (1M) | 65,535 | ❌ Không | LOW | Gemini 3.6 Flash mức tư duy Low |
-| `gemini-3-flash-agent` | 1,048,576 (1M) | 65,535 | ✅ Có | HIGH | Gemini 3.5 Flash Agent High thinking |
-| `gemini-3.5-flash-low` | 1,048,576 (1M) | 65,535 | ✅ Có | MEDIUM | Gemini 3.5 Flash mức Medium |
-| `gemini-3.5-flash-extra-low`| 1,048,576 (1M) | 65,535 | ✅ Có | LOW | Gemini 3.5 Flash mức Low |
-| `gemini-3.5-flash-lite` | 1,048,576 (1M) | 65,535 | ❌ Không | - | Gemini 3.5 Flash Lite siêu nhanh (text-only) |
-| `gemini-3-flash` | 1,048,576 (1M) | 65,535 | ✅ Có | Auto | Gemini 3 Flash bản tiêu chuẩn |
-| `gemini-3.1-flash-lite` | 1,048,576 (1M) | 65,535 | ❌ Không | - | Gemini 3.1 Flash Lite text-only |
-| `gemini-3.1-flash-image`| 1,000,000 (1M) | 64,000 | ❌ Không | - | Gemini 3.1 Flash Image tối ưu cho hình ảnh |
+| `gemini-3.8-flash` | 1,048,576 (1M) | 65,536 | ✅ Có | `low`, `medium`, `high` | Gemini 3.8 Flash thế hệ mới (Maps $\rightarrow$ `gemini-3.8-flash-{low/medium/high}`) |
+| `gemini-3.7-flash` | 1,048,576 (1M) | 65,536 | ✅ Có | `low`, `medium`, `high` | Gemini 3.7 Flash Thinking (Maps $\rightarrow$ `gemini-3.7-flash-{low/medium/high}`) |
+| `gemini-3.6-flash` | 1,048,576 (1M) | 65,536 | ✅ Có | `low`, `medium`, `high` | Gemini 3.6 Flash (Maps $\rightarrow$ `gemini-3.6-flash-{low/medium/high}`) |
+| `gemini-3.5-flash` | 1,048,576 (1M) | 65,536 | ✅ Có | `low`, `medium`, `high` | Gemini 3.5 Flash (Maps $\rightarrow$ `gemini-3.5-flash-extra-low` / `gemini-3-flash-agent`) |
+| `gemini-3.1-pro` | 1,048,576 (1M) | 65,535 | ✅ Có | `low`, `high` | Gemini 3.1 Pro (Maps $\rightarrow$ `gemini-3.1-pro-low` / `gemini-pro-agent`) |
+| `claude-opus-4-6` | 250,000 | 64,000 | ✅ Có | `high` (thinking) | Claude Opus 4.6 Thinking qua Antigravity bridge |
+| `claude-sonnet-4-6` | 200,000 | 64,000 | ✅ Có | `high` (thinking) | Claude Sonnet 4.6 Thinking qua Antigravity bridge |
+| `gpt-oss-120b` | 131,072 | 32,768 | ✅ Có | `medium` | GPT-OSS 120B mã nguồn mở chạy trên hạ tầng Google |
 
 ---
 
-### ⚙️ Cơ chế Xử lý Thinking Level (Reasoning Effort Resolution)
+### ⚙️ Cơ Chế Xử Lý Thinking Effort (Reasoning Routing)
 
-1. **Hậu tố định danh (Suffix Resolution):**
-   - ID chứa `-high` $\rightarrow$ `HIGH`
-   - ID chứa `-medium` $\rightarrow$ `MEDIUM`
-   - ID chứa `-low` hoặc `extra-low` $\rightarrow$ `LOW`
-   - `gemini-pro-agent` / `*flash-agent` $\rightarrow$ `HIGH`
-2. **Tự động kẹp mức MINIMAL $\rightarrow$ LOW trên Gemini 3.7+ (`isMinimalThinkingSupported`):**
-   - Backend Antigravity của Google từ chối mức `MINIMAL` đối với các mô hình Gemini 3.7 trở lên (trả về lỗi `HTTP 400: Thinking level MINIMAL is not supported for this model`).
-   - Extension tự động phát hiện phiên bản qua `isMinimalThinkingSupported(modelId)`: các mô hình Gemini 3.7+ khi yêu cầu mức `minimal` sẽ được tự động kẹp lên mức sàn an toàn là `LOW`.
-   - Các thế hệ Gemini 3.6 trở xuống vẫn tiếp tục hỗ trợ mức `MINIMAL` bình thường.
-
----
-
-## 🔧 Kiến trúc Native & Cơ chế Hoạt động
-
-Extension được xây dựng hoàn toàn bằng **TypeScript Native**, biên dịch ra `dist/index.js` và nạp trực tiếp qua Pi Extension API (`pi.registerProvider`):
-- **Không monkey-patching**: Tuyệt đối không can thiệp, vá lỗi hay sửa đổi file trong `node_modules` hay global packages.
-- **Độc lập và an toàn**: Đầy đủ tính năng stream, OAuth PKCE, Undici HTTP Client, schema dereferencing tự thân.
-
-### 9 Cơ chế Tương thích & Tối ưu Giao thức:
-1. **Deterministic 63-bit Session ID & Trajectory Chaining:** Tạo Session ID cố định 63-bit (`deriveAntigravitySessionId`) từ user message đầu tiên và duy trì chuỗi phản hồi `last_execution_id` giúp tối đa hóa tỷ lệ trúng Prompt Cache của Google.
-2. **Keep-Alive HTTP Client & Connection Prewarming:** Quản lý kết nối qua Undici với `keepAliveTimeout: 60s` và tự động gửi `HEAD` request khi khởi động để loại bỏ độ trễ TLS handshake (150–300ms).
-3. **Recursive Schema Dereferencing:** Đệ quy giải phóng toàn bộ `$ref` và `$defs`, loại bỏ các schema keywords không tương thích để ngăn ngừa lỗi `HTTP 400 Bad Request` khi gọi tools.
-4. **System Instruction Wrapper (`role: "user"` & `parts`):** Đóng gói System Instruction dưới cấu trúc `parts` tương thích backend Google Antigravity; **không chèn identity prompt** khi người dùng không cấu hình system prompt — đúng hành vi client chính thức.
-5. **Sensitive-words Obfuscation:** Tự động tách các cụm từ nhạy cảm (mặc định `RFC 2119`, override qua `ANTIGRAVITY_SENSITIVE_WORDS`) bằng U+200B zero-width space để né matcher literal phía server trả về `429 RESOURCE_EXHAUSTED` trống — cùng mitigation với CLIProxyAPI.
-6. **Client Version Auto-Tracking:** Lấy version client Antigravity mới nhất từ update manifest chính thức khi khởi động (fallback `2.8.0`, override qua `ANTIGRAVITY_HUB_VERSION`) — backend gate model theo version nên version cũ sẽ bị từ chối dần.
-7. **Custom `requestId: "agent/..."`:** Tự sinh `requestId` tương thích với trace logging của Google Cloud Code Assist; **không gửi `requestType`** vì client chính thức bỏ trường này trên consumer Cloud Code (giá trị `"agent"` rơi vào bucket bị throttle cứng).
-8. **Claude Thinking Beta Header:** Tự động chèn `anthropic-beta: interleaved-thinking-2025-05-14` khi gọi Claude qua Antigravity bridge.
-9. **Multi-Scope OAuth PKCE & Auto Refresh:** Đăng nhập qua PKCE cổng `51121` với đầy đủ scopes, hỗ trợ Project ID fallback và tự động làm mới token.
+1. **Routing Tự Động Theo Mức Tư Duy (Effort Mapping):**
+   - Pi CLI quản lý mức reasoning thông qua tham số cấu hình (`--thinking low|medium|high|xhigh`).
+   - Extension tự động phân giải cấu hình sang các Runtime Model ID tương ứng phía backend của Google (ví dụ: `gemini-3.1-pro` với thinking `high` sẽ được điều hướng mượt mà sang runtime `gemini-pro-agent`).
+2. **Tự Động Kẹp Mức MINIMAL $\rightarrow$ LOW:**
+   - Backend Antigravity từ chối mức `MINIMAL` đối với các mô hình Gemini 3.7+ (trả về lỗi `HTTP 400`).
+   - Extension tự động chuẩn hoá các mức reasoning sàn về `LOW` an toàn, ngăn ngừa crash phiên làm việc.
+3. **Claude Interleaved Thinking Header:**
+   - Khi gọi các mô hình Claude reasoning, extension tự động đính kèm header `anthropic-beta: interleaved-thinking-2025-05-14`.
 
 ---
 
-## 📂 Cấu trúc Dự án
+## 🔧 Các Cơ Chế Kỹ Thuật Cốt Lõi (Architecture)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                          Pi CLI                             │
+│       (@mariozechner/pi-coding-agent / @earendil-works)      │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ Extension API (registerProvider)
+┌──────────────────────────────▼──────────────────────────────┐
+│                    antigravity-pi                           │
+│  ┌───────────────────┐  ┌───────────────────┐  ┌──────────┐ │
+│  │   Auth / OAuth    │  │  Stream & Parser  │  │  Models  │ │
+│  │     (PKCE 51121)  │  │ (SSE + Signature) │  │  Catalog │ │
+│  └─────────┬─────────┘  └─────────┬─────────┘  └────┬─────┘ │
+│            │                      │                 │       │
+│  ┌─────────▼──────────────────────▼─────────────────▼─────┐ │
+│  │  Trajectory Chaining / Disk State / Multi-Tier Cache   │ │
+│  └────────────────────────────┬───────────────────────────┘ │
+│                               │ Undici Connection Prewarming │
+└───────────────────────────────┼─────────────────────────────┘
+                                │ HTTPS / Keep-Alive (60s)
+┌───────────────────────────────▼─────────────────────────────┐
+│             Google Cloud Code Assist Backend                │
+│             (*.cloudcode-pa.googleapis.com)                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **Thought Signature Replay Cache (`thought-signature.ts`):**
+   - Quản lý bộ nhớ đệm in-memory (FIFO 2048 entries) lưu lại signature của từng tool call theo session.
+   - Khi thực hiện multi-turn replay hoặc chuyển đổi giữa các model trong cùng một phiên hội thoại, signature tương ứng sẽ được tái tạo hoặc fallback về `DEFAULT_THINKING_AG_SIGNATURE` an toàn.
+2. **Deterministic 63-bit Session ID & Trajectory Chaining (`util.ts`):**
+   - Sinh Session ID 63-bit âm (`-${hash}`) duy nhất từ lượt hội thoại user đầu tiên.
+   - Duy trì `trajectory_id`, tăng dần `last_step_index`, và xâu chuỗi `last_execution_id` qua từng turn để Google Cloud Code Assist nhận diện phiên và hit Prompt Cache.
+3. **Sensitive Words Obfuscation (`util.ts`):**
+   - Phân tích và chia nhỏ các cụm từ nhạy cảm (`RFC 2119`, `<system-directive>`, `conventions`, v.v.) bằng ký tự U+200B zero-width space trước khi gửi tới API.
+4. **Schema Dereferencing & Sanitization (`security.ts`):**
+   - Tự động đệ quy tháo gỡ toàn bộ `$ref` và `$defs`, làm sạch các meta keywords không tương thích trong JSON Schema của tools trước khi gửi lên Gemini/Claude backend.
+5. **Intelligent Retry Delay & Burst Protection (`stream.ts`):**
+   - Phân tích chính xác `Retry-After`, `x-ratelimit-reset-after`, và body JSON `retryDelay` để nghỉ trước khi retry, kết hợp jitter sleep chống nghẽn thắt cổ chai.
+
+---
+
+## 🛠️ Slash Commands & Tools Tích Hợp
+
+### 1. Slash Commands trong Terminal
+- `/antigravity.usage`: Xem chi tiết hạn mức quota theo thời gian thực (5h pool, weekly pool, thời gian reset của từng nhóm model).
+- `/antigravity.doctor`: Chẩn đoán trạng thái provider, endpoint đang dùng, Project ID, latency và mã lỗi gần nhất.
+- `/antigravity.models [all]`: Liệt kê danh sách runtime models khả dụng và tỷ lệ quota còn lại.
+- `/antigravity.image [--ratio 16:9] [--model gemini-3-pro-image] [--path output.png] <prompt>`: Sinh ảnh trực tiếp từ dòng lệnh.
+
+### 2. Built-in Agent Tool
+- `generate_image`: Agent có thể tự động gọi tool này để tạo ảnh minh họa khi được yêu cầu, tự động lưu vào `.pi/generated-images/` hoặc đường dẫn chỉ định.
+
+---
+
+## ⚙️ Biến Môi Trường (Environment Variables)
+
+| Biến Môi Trường | Giá Trị Mặc Định | Mô Tả |
+| :--- | :---: | :--- |
+| `PI_AGY_ENABLE_G1_CREDITS`<br/>*(hoặc `OPENCODE_AGY_ENABLE_G1_CREDITS`)* | `0` (Tắt) | Đặt thành `1` nếu bạn muốn cho phép sử dụng Google One AI Credits đã mua khi quota miễn phí cạn kiệt. |
+| `PI_AGY_AUTO_FALLBACK`<br/>*(hoặc `OPENCODE_AGY_AUTO_FALLBACK`)* | `0` (Tắt) | Đặt thành `1` để tự động chuyển sang model thấp hơn (3.8 $\rightarrow$ 3.7 $\rightarrow$ 3.6) khi gặp lỗi 404 hoặc 429. |
+| `PI_AGY_CLOAK_TOOLS`<br/>*(hoặc `OPENCODE_AGY_CLOAK_TOOLS`)* | `0` (Tắt) | Đặt thành `1` để ngụy trang tên tool với hậu tố `_ide` (tránh bộ lọc hạn chế tool calling). |
+| `PI_AGY_DECOY_TOOLS`<br/>*(hoặc `OPENCODE_AGY_DECOY_TOOLS`)* | `0` (Tắt) | Đặt thành `1` để chèn thêm các decoy IDE function declarations vào request. |
+| `PI_AGY_SENSITIVE_WORDS`<br/>*(hoặc `ANTIGRAVITY_SENSITIVE_WORDS`)* | Danh sách mặc định | Chuỗi các từ nhạy cảm cần obfuscate, phân tách bởi dấu phẩy `,`. Đặt thành rỗng `""` để tắt tính năng này. |
+| `ANTIGRAVITY_BASE_URL` | Cloud Code PA | Endpoint API tuỳ chỉnh (phải thuộc domain an toàn của Google). |
+| `ANTIGRAVITY_PROJECT_ID` | Auto Discovery | Ghi đè Project ID thật của tài khoản Google Cloud. |
+| `ANTIGRAVITY_HUB_VERSION` | Manifest / 2.8.0 | Ghi đè version client Antigravity để phục vụ model gating. |
+| `ANTIGRAVITY_NO_PREWARM` | `0` (Prewarm bật) | Đặt thành `1` để tắt việc gửi prewarming HEAD request lúc khởi động. |
+| `ANTIGRAVITY_SESSIONS_FILE` | `~/.pi/agent/cache/...` | Đường dẫn tuỳ chỉnh lưu trữ session state file. |
+
+---
+
+## 📂 Cấu Trúc Dự Án (Project Structure)
 
 ```text
 antigravity-pi/
-├── index.ts                       # Root re-export dist/index.js
+├── index.ts                       # Entry point re-exporting dist/index.js
 ├── package.json                   # Pi manifest ("pi": {"extensions": ["./dist/index.js"]})
-├── tsconfig.json                  # TypeScript config (ES2022 / NodeNext)
-├── dist/                          # Compiled native extension artifacts
+├── tsconfig.json                  # TypeScript configuration (ES2022 / NodeNext)
+├── dist/                          # Biên dịch native extension artifacts
 │   └── index.js
-├── src/                           # Native TypeScript source code
-│   ├── index.ts                   # Extension entry point, commands & registration
-│   ├── auth/                      # Headless OAuth PKCE & token management
-│   ├── client/                    # Antigravity API client & Undici HTTP dispatcher
-│   ├── diagnostics/               # Diagnostic commands (/antigravity.doctor, models)
-│   ├── image/                     # Vision / image generation command
-│   ├── models/                    # Model catalog & thinking level mappings
-│   ├── stream/                    # SSE streaming response & tool-call handling
-│   ├── types/                     # TypeScript interfaces & enums
-│   ├── usage/                     # Quota discovery & usage tracking (/antigravity.usage)
-│   └── utils/                     # HTTP, security, and schema dereferencing utilities
+├── src/
+│   ├── index.ts                   # Extension setup, commands & tool registrations
+│   ├── auth/                      # Headless OAuth PKCE, tokens & Project ID discovery
+│   ├── client/                    # Client metadata, version manifests, headers & endpoints
+│   ├── diagnostics/               # Chẩn đoán kết nối (/antigravity.doctor)
+│   ├── image/                     # Xử lý sinh ảnh (/antigravity.image & generate_image tool)
+│   ├── models/                    # Model catalog, thinking level mappings & fallback routing
+│   ├── stream/                    # SSE Parser, Thought Signature Cache & Tool calling stream
+│   ├── types/                     # TypeScript interfaces, schemas & enums
+│   ├── usage/                     # Kiểm tra quota & pools (/antigravity.usage, /antigravity.models)
+│   └── utils/                     # HTTP Keep-Alive, security scrubbers, session persistence
 ├── test/
-│   └── antigravity.test.ts        # Comprehensive unit test suite (42 tests)
+│   ├── antigravity.test.ts        # Unit test suite toàn diện cho stream, auth, security & models
+│   └── cache.test.ts              # Unit test suite cho modelCache, projectCache & sessionState
 └── README.md
 ```
 
 ---
 
-## 🛠️ Cài đặt & Sử dụng
+## 🚀 Cài Đặt & Sử Dụng (Installation & Usage)
 
 ### 1. Cài đặt Extension
 
@@ -131,11 +171,11 @@ mkdir -p ~/.pi/agent/extensions
 git clone https://github.com/minhgv/antigravity-pi.git ~/.pi/agent/extensions/antigravity-native
 cd ~/.pi/agent/extensions/antigravity-native
 
-# Cài đặt dependencies và biên dịch TypeScript
+# Cài đặt dependencies và build
 npm install
 npm run build
 
-# Chạy bộ kiểm thử tự động toàn diện (42 tests)
+# Chạy test suite (68 tests)
 npm test
 ```
 
@@ -143,46 +183,49 @@ npm test
 
 ```jsonc
 {
-  "defaultModel": "google-antigravity/gemini-3.7-flash-high",
-  "smallModel": "google-antigravity/gemini-3.7-flash-low",
+  "defaultModel": "google-antigravity/gemini-3.7-flash",
+  "smallModel": "google-antigravity/gemini-3.6-flash",
   "plugins": ["antigravity-native"]
 }
 ```
 
-### 3. Đăng nhập & Sử dụng CLI
+*(Bạn có thể sử dụng prefix `antigravity/` hoặc `google-antigravity/` đều được)*
+
+### 3. Đăng nhập & Bắt đầu sử dụng
 
 ```bash
-# Đăng nhập OAuth PKCE lần đầu
+# Đăng nhập OAuth 2.0 PKCE với tài khoản Google
 pi login google-antigravity
+# hoặc:
+pi login antigravity
 
-# Khởi động với model mặc định (Gemini 3.7 Flash High)
+# Khởi động Pi CLI
 pi
 
-# Khởi động với model cụ thể
-pi --model google-antigravity/gemini-3.7-flash-high "Xin chào!"
+# Chỉ định model cụ thể và mức thinking
+pi --model google-antigravity/gemini-3.7-flash --thinking high "Phân tích kiến trúc dự án này"
 
-# Liệt kê danh sách models khả dụng
-pi --list-models | grep google-antigravity
+# Xem danh sách models đã đăng ký
+pi --list-models | grep antigravity
 ```
 
 ---
 
-## 🧪 Chạy Kiểm thử (Testing)
+## 🧪 Kiểm Thử & Đóng Gói (Development & Testing)
 
 ```bash
-# Chạy bộ test suite 42 tests tự động kiểm tra stream, auth, cache, models và schema
+# Chạy bộ test suite 68 tests tự động
 npm test
 
-# Kiểm tra kiểu dữ liệu TypeScript
+# Kiểm tra kiểu TypeScript (Type check)
 npm run typecheck
 
-# Biên dịch lại extension
+# Build lại dist/
 npm run build
 ```
 
 ---
 
-## 📜 Giấy phép
+## 📜 Giấy Phép (License)
 
-MIT License. Bản quyền thuộc về Minh GV.
-
+Dự án được phân phối dưới giấy phép [MIT License](LICENSE). Bản quyền thuộc về **Minh GV** (`minhgv@gmail.com`).
