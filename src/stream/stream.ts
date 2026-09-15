@@ -70,6 +70,7 @@ import {
   getOrCreateAntigravitySession,
   isRecord,
   obfuscateSensitiveWords,
+  extractRetryDelay,
   persistAntigravitySessions,
   sanitizeText,
   sleep,
@@ -1054,7 +1055,12 @@ export function streamAntigravity(
               continue;
             }
             lastText = await response.text();
-            if (response.status === 429 && /Individual quota reached/i.test(lastText)) break;
+            if (response.status === 429) {
+              if (/Individual quota reached/i.test(lastText)) break;
+              const retryMs = extractRetryDelay(lastText, response);
+              const delay = retryMs !== null ? Math.min(retryMs, 5000) : 1000 + Math.floor(Math.random() * 500);
+              await sleep(delay);
+            }
             if (![403, 404, 429, 500, 502, 503, 504].includes(response.status)) break;
           }
 
