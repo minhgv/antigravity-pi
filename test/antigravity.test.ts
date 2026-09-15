@@ -18,6 +18,8 @@ import {
 	mapStopReason,
 	parseAntigravityRateLimitReason,
 	streamResponse,
+	AG_TOOL_SUFFIX,
+	AG_DECOY_TOOLS,
 } from "../src/stream/stream.js";
 import {
 	recordThoughtSignature,
@@ -55,6 +57,7 @@ import {
 	persistAntigravitySessions,
 	resetAntigravitySessionMemory,
 	sanitizeText,
+	extractRetryDelay,
 } from "../src/utils/util.js";
 import { getApiKey } from "../src/auth/index.js";
 import {
@@ -1143,4 +1146,65 @@ test("convertMessages rescues tool calls across model switch during conversation
 	assert.equal(fc.thoughtSignature, DEFAULT_THINKING_AG_SIGNATURE);
 
 	clearThoughtSignatureCache();
+});
+
+test("antigravitySensitiveWords supports expanded defaults and env variables", () => {
+	const words = antigravitySensitiveWords();
+	assert.ok(words.includes("RFC 2119"));
+	assert.ok(words.includes("system-conventions"));
+	assert.ok(words.includes("<system-directive>"));
+	assert.ok(words.includes("conventions"));
+
+	const obfuscated = obfuscateSensitiveWords("Follow RFC 2119 and system-conventions carefully", words);
+	assert.ok(!obfuscated.includes("RFC 2119"));
+	assert.ok(!obfuscated.includes("system-conventions"));
+	assert.ok(obfuscated.includes("R\u200BFC 2119"));
+});
+
+test("extractRetryDelay parses retry headers and body patterns", () => {
+	// Header retry-after
+	const res1 = { headers: { "retry-after": "5" } };
+	assert.equal(extractRetryDelay("", res1), 5000);
+
+	// Header x-ratelimit-reset-after
+	const res2 = { headers: { "x-ratelimit-reset-after": "2.5" } };
+	assert.equal(extractRetryDelay("", res2), 2500);
+
+	// Body regex "Please retry in 3.5s"
+	assert.equal(extractRetryDelay("Rate limit exceeded. Please retry in 3.5s"), 3500);
+
+	// Body JSON retryDelay
+	assert.equal(extractRetryDelay('{"error": {"message": "Resource exhausted", "retryDelay": "500ms"}}'), 500);
+	assert.equal(extractRetryDelay('{"error": {"message": "Resource exhausted", "retryDelay": "2s"}}'), 2000);
+});
+
+test("antigravityHeaders includes Client-Metadata and x-request-source", () => {
+	const headers = antigravityHeaders("test_token", { chat: true });
+	assert.equal(headers["x-request-source"], "local");
+	assert.ok(headers["Client-Metadata"]);
+	const metadata = JSON.parse(headers["Client-Metadata"]);
+	assert.equal(metadata.ideType, "ANTIGRAVITY");
+	assert.equal(metadata.pluginType, "GEMINI");
+});
+
+test("convertTools cloaks tool names with _ide suffix and injects decoy tools", () => {
+	const dummyTools = [
+		{
+			name: "read_file",
+			description: "Read a file",
+			parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+		},
+	];
+
+	// With cloaking
+	const cloaked = convertTools(dummyTools as never, false, { cloak: true, includeDecoys: true });
+	assert.ok(cloaked && cloaked[0].functionDeclarations);
+	const decls = cloaked[0].functionDeclarations;
+	assert.equal(decls[0].name, `read_file${AG_TOOL_SUFFIX}`);
+	
+	// Verify decoy tools injected
+	const decoyNames = AG_DECOY_TOOLS.map((d) => d.name);
+	for (const name of decoyNames) {
+		assert.ok(decls.some((d) => d.name === name), `Expected decoy tool ${name} present`);
+	}
 });
