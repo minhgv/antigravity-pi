@@ -48,15 +48,25 @@ const ZERO_WIDTH_SPACE = "​";
 
 /**
  * Phrases known to trip the server-side literal matcher. Override with
- * `ANTIGRAVITY_SENSITIVE_WORDS` (comma-separated); set it to an empty string
- * to disable obfuscation entirely.
+ * `ANTIGRAVITY_SENSITIVE_WORDS`, `PI_AGY_SENSITIVE_WORDS`, or `OPENCODE_AGY_SENSITIVE_WORDS` (comma-separated);
+ * set it to an empty string to disable obfuscation entirely.
  */
-const DEFAULT_SENSITIVE_WORDS = ["RFC 2119"];
+export const DEFAULT_SENSITIVE_WORDS = [
+  "RFC 2119",
+  "system-conventions",
+  "<system-directive>",
+  "conventions",
+  "XML tags inject system content",
+];
 
 export function antigravitySensitiveWords(): readonly string[] {
   // `??` (not antigravityEnv's `||`) so an empty value explicitly disables
   // obfuscation instead of falling back to the default list.
-  const raw = process.env.ANTIGRAVITY_SENSITIVE_WORDS ?? process.env.NOAGY_SENSITIVE_WORDS;
+  const raw =
+    process.env.ANTIGRAVITY_SENSITIVE_WORDS ??
+    process.env.PI_AGY_SENSITIVE_WORDS ??
+    process.env.OPENCODE_AGY_SENSITIVE_WORDS ??
+    process.env.NOAGY_SENSITIVE_WORDS;
   if (raw === undefined) return DEFAULT_SENSITIVE_WORDS;
   return raw
     .split(",")
