@@ -150,14 +150,15 @@ export function antigravityHeaders(
     "Content-Type": "application/json",
     Accept: "text/event-stream",
     "User-Agent": antigravityEnv("USER_AGENT") || defaultUserAgent(),
-  };
-  if (!opts?.chat) {
-    headers["X-Goog-Api-Client"] = "google-cloud-sdk vscode_cloudshelleditor/0.1";
-    headers["Client-Metadata"] = JSON.stringify({
+    "x-request-source": "local",
+    "Client-Metadata": JSON.stringify({
       ideType: "ANTIGRAVITY",
       platform,
       pluginType: "GEMINI",
-    });
+    }),
+  };
+  if (!opts?.chat) {
+    headers["X-Goog-Api-Client"] = "google-cloud-sdk vscode_cloudshelleditor/0.1";
   }
   return headers;
 }
