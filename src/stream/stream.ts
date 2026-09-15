@@ -445,6 +445,36 @@ function normalizeCustomToolSchema(schema: unknown): unknown {
   }
   return out;
 }
+export const AG_TOOL_SUFFIX = "_ide";
+
+
+export const AG_DECOY_TOOLS: GeminiFunctionDeclaration[] = [
+  {
+    name: "browser_subagent",
+    description: "This tool is currently unavailable.",
+    parametersJsonSchema: { type: "OBJECT", properties: {}, required: [] },
+  },
+  {
+    name: "command_status",
+    description: "This tool is currently unavailable.",
+    parametersJsonSchema: { type: "OBJECT", properties: {}, required: [] },
+  },
+  {
+    name: "find_by_name",
+    description: "This tool is currently unavailable.",
+    parametersJsonSchema: { type: "OBJECT", properties: {}, required: [] },
+  },
+  {
+    name: "list_dir",
+    description: "This tool is currently unavailable.",
+    parametersJsonSchema: { type: "OBJECT", properties: {}, required: [] },
+  },
+  {
+    name: "view_file_outline",
+    description: "This tool is currently unavailable.",
+    parametersJsonSchema: { type: "OBJECT", properties: {}, required: [] },
+  },
+];
 
 /**
  * Gemini accepts JSON Schema through parametersJsonSchema. Claude and GPT-OSS
@@ -454,26 +484,51 @@ function normalizeCustomToolSchema(schema: unknown): unknown {
 export function convertTools(
   tools: Tool[] | undefined,
   useLegacyParameters = false,
+  options: { cloak?: boolean; includeDecoys?: boolean } = {},
 ): { functionDeclarations: GeminiFunctionDeclaration[] }[] | undefined {
-  if (!tools?.length) return undefined;
-  return [
-    {
-      functionDeclarations: tools.map((tool) => {
-        const dereferenced = dereferenceSchema(tool.parameters);
-        const rootObject = ensureRootObjectSchema(dereferenced);
-        const schema = stripMetaSchema(rootObject);
-        return {
-          name: tool.name,
-          description: tool.description,
-          ...(useLegacyParameters
-            ? { parameters: normalizeCustomToolSchema(schema) }
-            : { parametersJsonSchema: schema }),
-        };
-      }),
-    },
-  ];
-}
+  if (!tools?.length && !options.includeDecoys) return undefined;
+  const shouldCloak =
+    options.cloak === true ||
+    process.env.PI_AGY_CLOAK_TOOLS === "1" ||
+    process.env.OPENCODE_AGY_CLOAK_TOOLS === "1";
+  const includeDecoys =
+    options.includeDecoys === true ||
+    process.env.PI_AGY_DECOY_TOOLS === "1" ||
+    process.env.OPENCODE_AGY_DECOY_TOOLS === "1";
 
+  const declarations: GeminiFunctionDeclaration[] = (tools || []).map((tool) => {
+    const dereferenced = dereferenceSchema(tool.parameters);
+    const rootObject = ensureRootObjectSchema(dereferenced);
+    const schema = stripMetaSchema(rootObject);
+    const toolName =
+      shouldCloak && !tool.name.endsWith(AG_TOOL_SUFFIX)
+        ? `${tool.name}${AG_TOOL_SUFFIX}`
+        : tool.name;
+    return {
+      name: toolName,
+      description: tool.description,
+      ...(useLegacyParameters
+        ? { parameters: normalizeCustomToolSchema(schema) }
+        : { parametersJsonSchema: schema }),
+    };
+  });
+
+  if (includeDecoys) {
+    for (const decoy of AG_DECOY_TOOLS) {
+      declarations.push(
+        useLegacyParameters
+          ? {
+              name: decoy.name,
+              description: decoy.description,
+              parameters: normalizeCustomToolSchema({ type: "OBJECT", properties: {}, required: [] }),
+            }
+          : decoy,
+      );
+    }
+  }
+
+  return [{ functionDeclarations: declarations }];
+}
 function mapToolChoiceMode(
   toolChoice: AntigravityStreamOptions["toolChoice"],
 ): GeminiToolCallingMode {
